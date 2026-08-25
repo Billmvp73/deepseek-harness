@@ -10,11 +10,14 @@ Status: implemented
 
 细节丢失发生在上游，且在适配器内无法恢复：pi-ai 在推送终止 `error` 事件之前，把捕获到的错误缩减为 `error.message`（`api/anthropic-messages.js`：`errorMessage = error instanceof Error ? error.message : JSON.stringify(error)`），丢弃了原始的 `Error` 及其 `cause` 链。undici 将可据以采取行动的 `SocketError` 放在 `cause` 上，却只交给 fetch 包装层一个裸的 `terminated`；pi-ai 只保留了这个词。pi-ai 的 `SimpleStreamOptions` 没有暴露任何 fetch/dispatcher/client 钩子，让我们能在细节被扁平化之前自行捕获 `cause`。
 
+同样的兜底穿透后来在 OpenAI 兼容网关上再次出现：这类网关把流式输出中途的上游断开报告为非标准的终止 `finish_reason: network_error`（OpenAI 的集合是 `stop|length|tool_calls|content_filter|function_call`），而不是抛出错误。`\bnetwork\b` 匹配不到 `network_error`，因为 `_` 是单词字符，于是该原因落入 `PI_AI_ERROR`，从未被重试。
+
 ## 决策
 
-- `classifyPiAiError` 识别另外两种传输层措辞，并将两者都映射为 `TRANSPORT`：
+- `classifyPiAiError` 识别三种传输层形态，并将它们全部映射为 `TRANSPORT`：
   - 流式输出中途的套接字断开，呈现为裸的 `terminated`（undici）或 `Premature close`（Node 流层）；
-  - 在终止事件之前被截断的流，每个 pi-ai 提供方各自抛出不同措辞（`Anthropic stream ended before message_stop`、`… before a terminal response event`、`… ended without a terminal event`、`Stream ended without finish_reason`），统一按 `stream ended before/without` 匹配。
+  - 在终止事件之前被截断的流，每个 pi-ai 提供方各自抛出不同措辞（`Anthropic stream ended before message_stop`、`… before a terminal response event`、`… ended without a terminal event`、`Stream ended without finish_reason`），统一按 `stream ended before/without` 匹配；
+  - 网关通过自己的终止 `finish_reason` 报告断开——`network_error`、`connection_error`、`socket_error`——通过把传输层单词模式扩为 `(?:network|connection|socket|fetch)(?:_error)?` 来匹配。这个可选后缀不会过度匹配：`content_filter` 不在单词列表内，而 `networked`/`networx` 过不了结尾的 `\b`。
 - 该分类器带有一条 `XXX(pi-ai upstream)` 注记，点名扁平化发生的位置并说明期望的修复方式：如果 pi-ai 有朝一日转发原始的 `Error` 或提供一个让我们捕获 `cause` 的钩子，就改为基于 `code`/`cause` 分类。在此之前分类仍是尽力而为的文本匹配。
 - `llm-pi-ai/README.md` 新增一条 Known-Limitations 条目，记录 pi-ai 会扁平化 cause 链，因此 harness code 是从消息文本中分类出来的。
 
@@ -30,6 +33,6 @@ Status: implemented
 
 ## 后果
 
-- 流式输出中途的传输层断开和终止前的流截断现在都携带 `TRANSPORT`，因此组合出的 `llm-retry` 策略会默认重试它们，而不是让该轮次失败。
+- 流式输出中途的传输层断开、终止前的流截断，以及网关报告的 `finish_reason: *_error` 现在都携带 `TRANSPORT`，因此组合出的 `llm-retry` 策略会默认重试它们，而不是让该轮次失败。
 - 通知文本不变（`terminated` / `Anthropic stream ended before message_stop`）：cause 细节在适配器看到之前就已丢失，因此 `errorChain` 没有更多内容可渲染。只有被路由的 `code` 得到了改善。
 - 分类仍然依赖字符串匹配且依赖提供方的措辞：未来某个 pi-ai 版本若改写这些错误的措辞，就会静默回退到 `PI_AI_ERROR`，直到模式被更新。`XXX` 注记指向那个持久的修复方式（基于转发的 `code`/`cause` 路由）。
