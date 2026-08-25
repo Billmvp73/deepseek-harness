@@ -219,6 +219,7 @@ These limits define where the adapter stops and future work begins. They are cur
 - **In-history `system` messages use pi-ai's common context conversion** — provider-specific placement follows pi-ai rather than a harness-owned wire override.
 - **Provider HTTP status is unavailable** — pi-ai error events do not expose a stable HTTP status across providers.
 - **Retry policy is provider-owned, not an SDK retry** — pi-ai SDK retries stay disabled so durable agent steps and `llm/retry` events own every visible attempt, and direct `ctx.llm.stream()` calls remain single-attempt.
+- **Error codes are classified from flattened provider message text** — pi-ai reduces a caught error to `error.message` before the terminal event and reports gateway `finish_reason` values verbatim, discarding the original `Error` and its `cause` chain, so `classifyPiAiError` routes on provider wording rather than a forwarded `code`/`cause`. A pi-ai release that rewords a transport error, or a gateway that coins a new drop marker, silently falls back to `PI_AI_ERROR` until the patterns are updated; the `XXX` note in `stream.ts` marks the durable fix.
 
 <a id="dev-note"></a>
 ### Dev Note
