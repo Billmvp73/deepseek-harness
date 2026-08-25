@@ -825,6 +825,14 @@ describe('mapStopReason / mapUsage', () => {
   })
 
   it.each([
+    // A gateway/proxy reports a non-standard `finish_reason` when its upstream
+    // connection drops mid-stream (OpenAI's set is stop|length|tool_calls|
+    // content_filter|function_call; `network_error` and siblings are provider-
+    // specific "the wire dropped" markers). Classify as transport so the default
+    // retry policy retries them instead of failing the turn.
+    'Provider finish_reason: network_error',
+    'Provider finish_reason: connection_error',
+    'Provider finish_reason: socket_error',
     'other side closed',
     'HTTP2 request did not get a response',
     'WebSocket closed unexpectedly',

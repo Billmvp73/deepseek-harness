@@ -53,7 +53,12 @@ function classifyPiAiError(message: string): string {
   // finish_reason`). The connection dropped mid-response, so this is a transport
   // truncation, not a model-level error.
   if (/stream ended (?:before|without)\b/i.test(message)) return 'TRANSPORT'
-  if (/\b(?:network|connection|socket|fetch)\b|\bECONN[A-Z]+\b/i.test(message)
+  // A gateway can also report the drop through its own terminal finish_reason:
+  // OpenAI's set is stop|length|tool_calls|content_filter|function_call, so
+  // `network_error` / `connection_error` / `socket_error` are provider-specific
+  // "upstream dropped" markers, and the word list accepts the `_error` suffix
+  // those reasons carry.
+  if (/\b(?:network|connection|socket|fetch)(?:_error)?\b|\bECONN[A-Z]+\b/i.test(message)
     || /\b(?:other side closed|HTTP2 request did not get a response|WebSocket closed unexpectedly)\b/i.test(message)
     // undici renders a mid-stream socket drop as a bare `terminated` (its
     // `cause` — the real SocketError — was flattened away upstream); Node's
