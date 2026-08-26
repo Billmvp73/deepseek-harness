@@ -167,13 +167,13 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async create(request) {
         return {
           rpcId: request.rpcId,
-          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't' }, created: true } },
+          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], worktreePaths: [], createdAt: 't', updatedAt: 't' }, created: true } },
         }
       },
       async rename(request) {
         return {
           rpcId: request.rpcId,
-          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't' } } },
+          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], worktreePaths: [], createdAt: 't', updatedAt: 't' } } },
         }
       },
       async delete(request) {
@@ -185,7 +185,7 @@ function fakeApi(overrides: Partial<{ muxFrames: MuxFrame[]; hostFrames: HostFra
       async insertSessionBefore(request) {
         return {
           rpcId: request.rpcId,
-          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], createdAt: 't', updatedAt: 't' } } },
+          result: { ok: true, value: { workspace: { workspaceId: 'w1' as never, path: '/w', title: 'w', sessionIds: [], worktreePaths: [], createdAt: 't', updatedAt: 't' } } },
         }
       },
       async archiveSession(request) {

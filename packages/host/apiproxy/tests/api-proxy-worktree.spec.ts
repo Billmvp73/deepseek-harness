@@ -8,7 +8,8 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { basename, dirname, join } from 'node:path'
 import { promisify } from 'node:util'
@@ -265,7 +266,9 @@ describe('session.prompt newWorktree relocation', () => {
       sessionId, mode: 'queue' as const, content: [{ type: 'text' as const, text: '开工' }], newWorktree: true,
     }))
     // The worktree was created on disk but no session could start in it; the
-    // error names both and nothing reached the model.
+    // error names both and nothing reached the model. The failed relocation
+    // must not leave orphaned git state: the worktree directory and its
+    // wt-* branch are rolled back before the refusal surfaces.
     expect(response.result.ok).toBe(false)
     if (response.result.ok) throw new Error('expected failure')
     const error = response.result.error as { code: string; details: { cwd: string; worktree: string } }
@@ -274,6 +277,9 @@ describe('session.prompt newWorktree relocation', () => {
     expect(error.details.worktree).toContain('wt-')
     expect(followup).not.toHaveBeenCalled()
     expect(ctx.sessions.list()).toHaveLength(1)
+    expect(existsSync(error.details.worktree)).toBe(false)
+    const branches = await run('git', ['-C', repo, 'branch', '--list', 'wt-*'])
+    expect(branches.stdout.trim()).toBe('')
     await ctx.fiber.dispose()
   }, 20_000)
 
@@ -297,8 +303,18 @@ describe('session.prompt newWorktree relocation', () => {
     })
     // Publication precedes attachment: the relocation session exists, but the
     // caller still learns about the attachment failure instead of a silently
-    // ungrouped move.
+    // ungrouped move. The failed relocation rolls back too: no wt-* branch
+    // survives, and the `.worktrees` parent holds no leftover worktrees
+    // (git keeps the now-empty parent directory itself).
     expect(ctx.sessions.get(details.sessionId)).toBeDefined()
+    expect(response.result.ok).toBe(false)
+    const branches = await run('git', ['-C', repo, 'branch', '--list', 'wt-*'])
+    expect(branches.stdout.trim()).toBe('')
+    const parents = await readdir(join(repo, '..'))
+    const leftoverEntries = (await Promise.all(parents
+      .filter(name => name.startsWith(`${basename(repo)}.worktrees`))
+      .map(name => readdir(join(repo, '..', name))))).flat()
+    expect(leftoverEntries).toEqual([])
     await ctx.fiber.dispose()
   }, 20_000)
 
@@ -315,6 +331,10 @@ describe('session.prompt newWorktree relocation', () => {
     }))
     expect(response.result).toMatchObject({ ok: false, error: { code: 'internal' } })
     expect(followup).not.toHaveBeenCalled()
+    // The workspace-resolution failure also rolls the worktree back: no
+    // wt-* branch survives the refusal.
+    const branches = await run('git', ['-C', repo, 'branch', '--list', 'wt-*'])
+    expect(branches.stdout.trim()).toBe('')
     await ctx.fiber.dispose()
   }, 20_000)
 })

@@ -1569,6 +1569,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     path: '/tmp/fixture',
     title: 'fixture',
     sessionIds: [sid('fx-alpha'), sid('fx-beta'), sid('fx-gamma')],
+    worktreePaths: [],
     createdAt: fixtureEpoch,
     updatedAt: fixtureEpoch,
   }, {
@@ -1576,6 +1577,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     path: `${FIXTURE_HOME}/Documents/project`,
     title: 'project',
     sessionIds: [],
+    worktreePaths: [],
     createdAt: fixtureEpoch,
     updatedAt: fixtureEpoch,
   }]
@@ -2672,6 +2674,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
           path,
           title: path.split('/').filter(Boolean).at(-1) ?? path,
           sessionIds: [],
+          worktreePaths: [],
           createdAt: now,
           updatedAt: now,
         }

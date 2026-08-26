@@ -111,7 +111,8 @@ import {
   inspectApiRemoteSession,
 } from '@deepseek-ai/dsh-api-remotes'
 import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-path-opener.ts'
-import { createGitWorktree } from './worktree.ts'
+import { createGitWorktree, removeGitWorktree } from './worktree.ts'
+import type { CreatedWorktree } from './worktree.ts'
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
@@ -1022,6 +1023,7 @@ function workspaceView(workspace: Workspace): WorkspaceView {
     path: workspace.path,
     title: workspace.title,
     sessionIds: [...workspace.sessionIds],
+    worktreePaths: [...workspace.worktreePaths],
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
   }
@@ -1035,6 +1037,7 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
     path: record.path,
     title: record.title,
     sessionIds: [...record.sessionIds],
+    worktreePaths: [...record.worktreePaths],
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }
@@ -1836,10 +1839,25 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     | { agent: Agent; sessionId: SessionId }
   > {
     const cwd = agent.session.header.cwd ?? defaults.cwd
+    let created: CreatedWorktree | undefined
+    // A failure after `git worktree add` must not leave the directory and its
+    // branch orphaned on the user's machine: every refusal below rolls the
+    // worktree back first. Rollback itself is best-effort — a cleanup failure
+    // is logged and leaves the directory in place rather than masking the
+    // refusal that triggered it.
+    const rollback = async (): Promise<void> => {
+      if (created === undefined) return
+      try {
+        await removeGitWorktree(created)
+      } catch (cleanupError: unknown) {
+        ctx.logger.warn(`new-worktree rollback for "${created.path}" failed (left in place): ${String(cleanupError)}`)
+      }
+    }
     let worktreePath: string
     try {
       const worktree = await createGitWorktree(cwd)
       if (worktree === null) return { ignored: true }
+      created = worktree
       worktreePath = worktree.path
     } catch (error: unknown) {
       return { refused: err(request, {
@@ -1853,6 +1871,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     try {
       moved = await ensureSession(newSessionId, worktreePath, false, resolveSessionPreset(agent.session))
     } catch (error: unknown) {
+      await rollback()
       return { refused: err(request, {
         code: 'worktree-failed',
         message: `worktree "${worktreePath}" was created for session "${agent.session.id}" but the session could not start there: ${String(error)}`,
@@ -1867,6 +1886,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     try {
       workspace = await forkWorkspace(agent.session)
     } catch (error: unknown) {
+      await rollback()
       return { refused: err(request, {
         code: 'internal',
         message: `failed to resolve the source workspace for session "${agent.session.id}": ${String(error)}`,
@@ -1878,6 +1898,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         await workspace.addWorktree(worktreePath)
         await workspace.attachSession(newSessionId)
       } catch (error: unknown) {
+        await rollback()
         return { refused: err(request, {
           code: 'workspace-attach-failed',
           message: `session "${newSessionId}" was created in worktree "${worktreePath}" but could not attach to workspace "${workspace.id}": ${String(error)}`,

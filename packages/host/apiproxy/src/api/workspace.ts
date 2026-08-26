@@ -33,6 +33,11 @@ export interface WorkspaceView {
   createdAt: string
   /** ISO-8601 last-mutation instant. */
   updatedAt: string
+  /**
+   * Canonical directories of linked git worktrees whose sessions this
+   * workspace accounts besides its own root, in registration order.
+   */
+  worktreePaths: string[]
 }
 
 /** Workspace-domain unary methods (the map keys workspace.* of RpcMethodMap). */
