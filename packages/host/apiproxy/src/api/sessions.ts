@@ -347,14 +347,25 @@ export interface SessionsApi {
    * the Host validates, canonicalizes, and records it on that exact user message. Omission remains
    * valid for non-browser callers. Session-backed subagents reject with `agent-busy` and use
    * `subagent.prompt`.
+   *
+   * `newWorktree` is request-local provenance (like `clientTimeZone`, never session state):
+   * when true and the target session is still blank (no turn has run), the Host relocates the
+   * work into a freshly created git worktree of the repository owning the session cwd — a new
+   * session (same composition, same Workspace, copied model selection) whose cwd is the new
+   * worktree receives this exact prompt, and the response names it via `sessionId` so the
+   * caller can move its selection. A cwd outside any git repository ignores the flag and
+   * prompts in place; a git failure after the repository check rejects with `worktree-failed`
+   * (or `workspace-attach-failed`) and nothing is sent to the model. Non-blank sessions ignore
+   * the flag.
    */
   prompt(request: RpcRequest<{
     sessionId: SessionId
     mode: 'queue' | 'steer'
     content: PromptContentPart[]
     clientTimeZone?: string
+    newWorktree?: boolean
   }>):
-  Promise<RpcResponse<{ accepted: true; command?: { kind: 'success'; text?: string } }>>
+  Promise<RpcResponse<{ accepted: true; command?: { kind: 'success'; text?: string }; sessionId?: SessionId }>>
 
   /** Reads one durable image after proving that this session's log references its id. */
   attachment(request: RpcRequest<{ sessionId: SessionId; attachmentId: AttachmentIdType }>):

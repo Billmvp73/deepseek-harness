@@ -14,7 +14,7 @@ export type ConversationRootProps = ConversationSlotProps
 
 export function ConversationRoot({
   sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock,
-  renderSlot, renderSlotChain, selectWorkspace, t,
+  renderSlot, renderSlotChain, selectWorkspace, toggleNewWorktree, useNewWorktreeSessions, t,
 }: ConversationRootProps) {
   const openState = useSession(s => s.openState)
   const composerPhase = useSession(s => s.composerPhase)
@@ -97,6 +97,12 @@ export function ConversationRoot({
           ? undefined
           : workspaceLabel(cwd)))
 
+  // The hero new-worktree checkbox rides the blank session: checked, the next
+  // first prompt asks the Host to start the work in a fresh git worktree.
+  const newWorktreeOn = useNewWorktreeSessions(
+    sessions => sessionId !== undefined && sessions.has(sessionId),
+  )
+
   const heroWorkspaceRow = (
     <div className={css.heroWorkspaceRow}>
       <WorkspaceChip
@@ -106,6 +112,16 @@ export function ConversationRoot({
         onClick={() => { setPickerOpen(open => !open) }}
         t={t}
       />
+      {sessionId !== undefined && (
+        <label className={css.newWorktree}>
+          <input
+            type="checkbox"
+            checked={newWorktreeOn}
+            onChange={(event) => { toggleNewWorktree(sessionId, event.target.checked) }}
+          />
+          <span>{t('hero.newWorktree')}</span>
+        </label>
+      )}
       {renderSlot('conversation.hero.workspace', {
         open: pickerOpen,
         anchorRef: pickerAnchor,

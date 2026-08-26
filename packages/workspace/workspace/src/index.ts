@@ -296,6 +296,7 @@ export class WorkspaceRegistry extends Service {
       path: canonical,
       title: workspaceName,
       sessionIds: [],
+      worktreePaths: [],
       createdAt: now,
       updatedAt: now,
     }
@@ -461,6 +462,7 @@ export class WorkspaceRegistry extends Service {
           path: group.path,
           title: basename(group.path),
           sessionIds,
+          worktreePaths: [],
           createdAt,
           updatedAt: createdAt,
         }
@@ -600,7 +602,7 @@ export class WorkspaceRegistry extends Service {
       const record = this.requireTable().get(entity.id) as WorkspaceRecord
       for (const sessionId of record.sessionIds) {
         const path = this.sessionPaths.get(sessionId)
-        if (path === record.path) continue
+        if (path === record.path || record.worktreePaths.includes(path as string)) continue
         const reason = this.invalidSessionPaths.get(sessionId)
           ?? (this.headers.has(sessionId)
             ? `canonical cwd '${path}' differs from workspace path '${record.path}'`

@@ -27,7 +27,8 @@ Consumers see only the `Workspace` interface; the implementation stays package-p
  * One workspace: a stable id over an existing directory, a display title, and
  * an ordered candidate account of sessions. Membership requires both an id in
  * that account and a session header whose canonical cwd equals the workspace
- * path. Consumers only see this interface; the implementation stays private.
+ * path or one of its registered linked worktrees ({@link worktreePaths}).
+ * Consumers only see this interface; the implementation stays private.
  */
 interface Workspace {
   /** Stable record id (generated uuid). */
@@ -50,6 +51,15 @@ interface Workspace {
   readonly updatedAt: string
 
   /**
+   * Canonical directories of linked git worktrees whose sessions this
+   * workspace accounts besides its own root, in registration order. A linked
+   * path participates in membership exactly like {@link path}: a session
+   * whose canonical cwd equals it passes attach validation and the
+   * `sessionIds` filter. Empty for a workspace with no linked worktrees.
+   */
+  readonly worktreePaths: readonly string[]
+
+  /**
    * Header-validated sessions in manually owned order: a new session is
    * prepended at attach, explicit reordering goes through
    * `insertSessionBefore`, and activity never reorders. The durable candidate
@@ -70,14 +80,25 @@ interface Workspace {
    * Prepend a session to this workspace's candidate account. An already
    * accounted id resolves without writing, aside from the durable
    * filtered-candidate prune every accepted mutation performs. A new id's
-   * live or persisted
-   * header cwd must resolve to an existing directory equal to {@link path};
-   * unknown ids, missing or invalid cwd values, and mismatches reject without
-   * writing.
+   * live or persisted header cwd must resolve to an existing directory equal
+   * to {@link path} or one of {@link worktreePaths}; unknown ids, missing or
+   * invalid cwd values, and mismatches reject without writing.
    * @param sessionId - The session to record.
    * @returns resolution after durability.
    */
   attachSession(sessionId: SessionId): Promise<void>
+
+  /**
+   * Register one canonical directory as a linked git worktree of this
+   * workspace, so sessions created inside it pass membership validation like
+   * sessions in {@link path}. The path must resolve to an existing directory
+   * (it is canonicalized through `fs.realpath` before storage); an already
+   * registered path resolves without writing. Registration never accounts a
+   * session by itself — pair it with {@link attachSession}.
+   * @param path - Directory to link; typically a worktree of this workspace's repository.
+   * @returns resolution after durability.
+   */
+  addWorktree(path: string): Promise<void>
 
   /**
    * Move an accounted session within the manual order, DOM-insertBefore-like:

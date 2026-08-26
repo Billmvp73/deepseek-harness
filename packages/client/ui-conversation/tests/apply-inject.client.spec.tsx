@@ -165,7 +165,7 @@ describe('conversation slot inject API', () => {
     await vi.waitFor(() => {
       expect(state.getSnapshot().draft).toBe('')
     })
-    expect(b.sessionFake.prompt).toHaveBeenCalledWith([{ type: 'text', text: 'hello' }], 'queue', expect.any(AbortSignal))
+    expect(b.sessionFake.prompt).toHaveBeenCalledWith([{ type: 'text', text: 'hello' }], 'queue', expect.any(AbortSignal), undefined)
     // Failure: the draft is retained through the round-trip.
     b.sessionFake.prompt.mockResolvedValueOnce({ ok: false, error: { code: 'agent-busy', message: 'b', details: { reason: 'b' } } })
     actions.setDraft('retry me')
@@ -276,6 +276,17 @@ describe('conversation slot inject API', () => {
     })
     expect(state.getSnapshot().draft).toBe('')
     expect(b.inputApi(OTHER).state.getSnapshot().draft).toBe('carry me')
+    await b.runtime.dispose()
+  })
+
+  it('the resident inject face carries the new-worktree flag store and toggle', async () => {
+    const b = await bench()
+    const resident = b.residentApi(ROOT)
+    expect(resident.hooks.newWorktreeSessions.getSnapshot().has(ROOT)).toBe(false)
+    resident.toggleNewWorktree(ROOT, true)
+    expect(resident.hooks.newWorktreeSessions.getSnapshot().has(ROOT)).toBe(true)
+    resident.toggleNewWorktree(ROOT, false)
+    expect(resident.hooks.newWorktreeSessions.getSnapshot().has(ROOT)).toBe(false)
     await b.runtime.dispose()
   })
 

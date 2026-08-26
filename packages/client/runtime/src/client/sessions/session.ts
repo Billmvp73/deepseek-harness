@@ -47,6 +47,13 @@ export interface SessionOptions {
    */
   onEngaged?(session: Session): void
   /**
+   * The Host relocated an accepted prompt into a new session (the
+   * `newWorktree` start-in-a-worktree flow): the manager merges the new row
+   * and moves the selection. The source session stays blank — its log was
+   * never touched — so {@link onEngaged} deliberately does not fire for it.
+   */
+  onMoved?(movedTo: SessionId): void
+  /**
    * Manager-owned projection value store to adopt (frames route through the
    * manager and values outlive instantiation); omitted, the Session owns a
    * private store (bare object-layer construction).
@@ -185,13 +192,16 @@ export class Session implements SessionFace {
    * Send (queue/steer passed through 1:1); failures land in the snapshot's promptError.
    * @param content - text plus browser-owned temporary image uploads.
    * @param mode - queue appends after the current turn; steer interrupts it.
+   * @param signal - cancellation for the Host admission.
+   * @param opts - request-local send options (`newWorktree` start-in-a-worktree intent).
    * @returns the prompt result (also mirrored into promptError on failure).
    */
   async prompt(
     content: PromptContentPart[],
     mode: 'queue' | 'steer',
     signal?: AbortSignal,
-  ): Promise<RpcResult<{ accepted: true }>> {
+    opts?: { newWorktree?: boolean },
+  ): Promise<RpcResult<{ accepted: true; sessionId?: SessionId }>> {
     this.promptError = null
     this.lastAgentError = null
     // Synchronous, before the first await: the blank → engaging edge must be
@@ -200,7 +210,7 @@ export class Session implements SessionFace {
     this.promptAttempted = true
     if (this.blankBit) this.firstPromptPendingTurn = true
     this.notifier.markDirty()
-    let result: RpcResult<{ accepted: true }>
+    let result: RpcResult<{ accepted: true; sessionId?: SessionId }>
     try {
       if (this.address === undefined) {
         result = (await this.api.sessions.prompt({
@@ -208,6 +218,7 @@ export class Session implements SessionFace {
           mode,
           content,
           clientTimeZone: resolvedClientTimeZone(),
+          ...(opts?.newWorktree === true ? { newWorktree: true } : {}),
         }, signal)).result
       } else if (this.address.mode === 'one-shot') {
         result = {
@@ -245,6 +256,14 @@ export class Session implements SessionFace {
     if (!result.ok) {
       this.promptError = { op: 'send', error: result.error }
       this.notifier.markDirty()
+      return result
+    }
+    // The Host relocated this prompt into a new session (newWorktree flow):
+    // hand the selection over and stop here — this session's log was never
+    // touched, so it stays blank (hidden, reusable) and must not flip.
+    const movedTo = result.value.sessionId
+    if (movedTo !== undefined && movedTo !== this.sessionId) {
+      this.options.onMoved?.(movedTo)
       return result
     }
     // Blank flips on ACCEPTANCE, not attempt: an accepted prompt starts the

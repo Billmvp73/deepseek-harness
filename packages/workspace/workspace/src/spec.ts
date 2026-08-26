@@ -16,12 +16,16 @@ const workspaceId = z.string().transform(value => value as WorkspaceId)
 /**
  * Durable shape of one workspace record. `path` is the `fs.realpath` canon
  * stamped at create; `sessionIds` is the ordered ownership account (array
- * order is display order); timestamps are ISO-8601 strings.
+ * order is display order); `worktreePaths` holds canonical directories of
+ * linked git worktrees whose sessions this workspace accounts (defaulted so
+ * records written before the field parse unchanged); timestamps are ISO-8601
+ * strings.
  */
 export const workspaceRecord = z.object({
   path: z.string(),
   title: z.string(),
   sessionIds: z.array(z.string().transform(SessionId)),
+  worktreePaths: z.array(z.string()).default([]),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

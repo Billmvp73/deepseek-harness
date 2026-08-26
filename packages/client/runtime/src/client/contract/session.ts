@@ -36,13 +36,20 @@ export interface ISession {
    * Send a prompt into the session.
    * @param content - text plus browser-owned temporary image uploads.
    * @param mode - 'queue' appends a turn; 'steer' interrupts the running one.
-   * @returns acceptance, or the business error (also mirrored into snapshot.promptError).
+   * @param opts - request-local send options. `newWorktree` asks the Host to
+   *   relocate a still-blank session's first turn into a freshly created git
+   *   worktree (ignored outside a repository); the response then names the
+   *   session the prompt actually started via `sessionId`, and the selection
+   *   follows it through the runtime's moved-session handling.
+   * @returns acceptance (plus the moved-to session id when the Host relocated
+   *   the prompt), or the business error (also mirrored into snapshot.promptError).
    */
   prompt(
     content: PromptContentPart[],
     mode: 'queue' | 'steer',
     signal?: AbortSignal,
-  ): Promise<RpcResult<{ accepted: true }>>
+    opts?: { newWorktree?: boolean },
+  ): Promise<RpcResult<{ accepted: true; sessionId?: SessionId }>>
   /**
    * Resolve one durable image referenced by this session.
    * @param attachmentId - opaque id found in the folded session log.

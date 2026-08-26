@@ -41,6 +41,7 @@ import type {
   ModelCatalogFailure, ModelProviderGroup,
   ModelReasoning, MuxFrame, PromptContentPart, QuestionResponsePayload, SessionListMetadata, SessionProjectionsBlock, SessionSearchItem,
   QueuedInboxItem, SessionSummary, SettingsNamespaceView, SubagentAddress, JobView, ToolEventView,
+  ResponseValue,
   WorkspaceId, WorkspaceView,
 } from './api/index.ts'
 import {
@@ -110,6 +111,7 @@ import {
   inspectApiRemoteSession,
 } from '@deepseek-ai/dsh-api-remotes'
 import { canOpenNativePath, openNativePath, openNativeTextFile } from './native-path-opener.ts'
+import { createGitWorktree } from './worktree.ts'
 
 /** Page size when history is called without maxMessages. */
 const DEFAULT_MAX_MESSAGES = 50
@@ -1648,11 +1650,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   }
 
   /** Resolve or create one path while holding the Host's workspace-create chain. */
-  function ensureWorkspace(path: string): Promise<{ workspace: Workspace; created: boolean }> {
+  function ensureWorkspace(path: string, title?: string): Promise<{ workspace: Workspace; created: boolean }> {
     const operation = workspaceCreationChain.then(async () => {
       const existing = await ctx.workspaceRegistry.resolveByPath(path)
       if (existing !== undefined) return { workspace: existing, created: false }
-      return { workspace: await ctx.workspaceRegistry.create(path), created: true }
+      return { workspace: await ctx.workspaceRegistry.create(path, title), created: true }
     })
     workspaceCreationChain = operation.then(() => undefined, () => undefined)
     return operation
@@ -1805,6 +1807,85 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       }
     }
     return { agent }
+  }
+
+  /**
+   * Relocate a blank session's first prompt into a fresh git worktree of the
+   * repository owning its cwd (`session.prompt`'s request-local
+   * `newWorktree` flag). The work lands in a NEW session — session headers
+   * are immutable, and a fresh identity keeps the abandoned blank session
+   * reusable — composed from the source preset and seeded with the source's
+   * current model selection. The worktree is a directory OUTSIDE the source
+   * Workspace root; the workspace domain accounts linked-worktrees sessions,
+   * so the workspace's `addWorktree` registers the path first and the new
+   * session then attaches to the SAME workspace as its source — keeping it in
+   * the original group rather than spawning a new one.
+   * @param request - the prompt request carrying `newWorktree`.
+   * @param agent - the blank source session's live agent.
+   * @returns `ignored` when the cwd is not inside a git repository (the flag
+   *   does not apply and the prompt proceeds in place); `refused` when the
+   *   relocation itself failed (nothing reached the model); otherwise the new
+   *   worktree session's agent and id.
+   */
+  async function relocatePromptToNewWorktree(
+    request: RpcRequest<unknown>,
+    agent: Agent,
+  ): Promise<
+    { ignored: true }
+    | { refused: RpcResponse<ResponseValue<'session.prompt'>> }
+    | { agent: Agent; sessionId: SessionId }
+  > {
+    const cwd = agent.session.header.cwd ?? defaults.cwd
+    let worktreePath: string
+    try {
+      const worktree = await createGitWorktree(cwd)
+      if (worktree === null) return { ignored: true }
+      worktreePath = worktree.path
+    } catch (error: unknown) {
+      return { refused: err(request, {
+        code: 'worktree-failed',
+        message: `failed to create a new git worktree for session "${agent.session.id}" in "${cwd}": ${String(error)}`,
+        details: { cwd },
+      }) }
+    }
+    const newSessionId = `session-${randomUUID()}` as SessionId
+    let moved: Agent
+    try {
+      moved = await ensureSession(newSessionId, worktreePath, false, resolveSessionPreset(agent.session))
+    } catch (error: unknown) {
+      return { refused: err(request, {
+        code: 'worktree-failed',
+        message: `worktree "${worktreePath}" was created for session "${agent.session.id}" but the session could not start there: ${String(error)}`,
+        details: { cwd, worktree: worktreePath },
+      }) }
+    }
+    selectionFor(moved).current = { ...selectionFor(agent).current }
+    // A loose source session with no workspace stays Ungrouped (a worktree
+    // session needs a workspace root to group under, and creating one would
+    // spawn a new sidebar group the user did not ask for).
+    let workspace: Workspace | undefined
+    try {
+      workspace = await forkWorkspace(agent.session)
+    } catch (error: unknown) {
+      return { refused: err(request, {
+        code: 'internal',
+        message: `failed to resolve the source workspace for session "${agent.session.id}": ${String(error)}`,
+        details: {},
+      }) }
+    }
+    if (workspace !== undefined) {
+      try {
+        await workspace.addWorktree(worktreePath)
+        await workspace.attachSession(newSessionId)
+      } catch (error: unknown) {
+        return { refused: err(request, {
+          code: 'workspace-attach-failed',
+          message: `session "${newSessionId}" was created in worktree "${worktreePath}" but could not attach to workspace "${workspace.id}": ${String(error)}`,
+          details: { sessionId: newSessionId, workspaceId: workspace.id },
+        }) }
+      }
+    }
+    return { agent: moved, sessionId: newSessionId }
   }
 
   /** Missing-service report shared by the settings domain (skills-domain stance). */
@@ -2359,7 +2440,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
 
       async prompt(request) {
-        const { sessionId, mode, content, clientTimeZone } = request.payload
+        const { sessionId, mode, content, clientTimeZone, newWorktree } = request.payload
         const canonicalTimeZone = clientTimeZone === undefined
           ? undefined
           : canonicalClientTimeZone(clientTimeZone)
@@ -2370,9 +2451,21 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             details: { value: clientTimeZone },
           })
         }
-        const resolved = await turnAgentFor<{ accepted: true }>(request, sessionId)
+        const resolved = await turnAgentFor<ResponseValue<'session.prompt'>>(request, sessionId)
         if ('refused' in resolved) return resolved.refused
-        const agent = resolved.agent
+        let agent = resolved.agent
+        // Request-local new-worktree provenance: only a still-blank session
+        // relocates — the flag is a start-in-a-worktree intent, never a
+        // mid-conversation move.
+        let movedSessionId: SessionId | undefined
+        if (newWorktree === true && sessionBlank(agent.session)) {
+          const relocation = await relocatePromptToNewWorktree(request, agent)
+          if ('refused' in relocation) return relocation.refused
+          if (!('ignored' in relocation)) {
+            agent = relocation.agent
+            movedSessionId = relocation.sessionId
+          }
+        }
         // Request identity and optional browser zone ride the exact durable user message.
         const source: MessageSource = {
           kind: 'user',
@@ -2380,7 +2473,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
         }
         const hasImage = content.some(part => part.type === 'image')
-        const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
+        const admit = async (): Promise<RpcResponse<ResponseValue<'session.prompt'>>> => {
           try {
             if (hasImage) {
               const current = selectionFor(agent).current
@@ -2411,7 +2504,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               details: { reason: String(error) },
             })
           }
-          return ok(request, { accepted: true as const })
+          return ok(request, {
+            accepted: true as const,
+            ...(movedSessionId === undefined ? {} : { sessionId: movedSessionId }),
+          })
         }
         return hasImage ? serializeImageAdmission(agent, admit) : admit()
       },
