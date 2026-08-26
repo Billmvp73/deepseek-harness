@@ -838,6 +838,15 @@ describe('mapStopReason / mapUsage', () => {
       stopReason: 'error',
       errorMessage: 'vector length limit exceeded',
     }))).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR' } })
+    // Boundary pins for the widened transient patterns: a non-drop finish
+    // reason stays outside the transport word list, and `errored` fails the
+    // trailing word boundary of the SERVER wording.
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: 'Provider finish_reason: content_filter',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR' } })
+    expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'the server errored' })))
+      .toMatchObject({ kind: 'error', failure: { code: 'PI_AI_ERROR' } })
   })
 
   it.each([
