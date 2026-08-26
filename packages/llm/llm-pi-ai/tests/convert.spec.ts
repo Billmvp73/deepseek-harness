@@ -808,6 +808,10 @@ describe('mapStopReason / mapUsage', () => {
     }))).toMatchObject({ kind: 'error', failure: { code: 'QUOTA' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'HTTP 500: backend down' })))
       .toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
+    expect(mapStopReason(assistant({
+      stopReason: 'error',
+      errorMessage: 'Error Code server_error: Our servers are currently overloaded. Please try again later.',
+    }))).toMatchObject({ kind: 'error', failure: { code: 'SERVER' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'provider timed out' })))
       .toMatchObject({ kind: 'error', failure: { code: 'TIMEOUT' } })
     expect(mapStopReason(assistant({ stopReason: 'error', errorMessage: 'ECONNRESET socket closed' })))
@@ -845,6 +849,16 @@ describe('mapStopReason / mapUsage', () => {
     'Provider finish_reason: network_error',
     'Provider finish_reason: connection_error',
     'Provider finish_reason: socket_error',
+    // Normalized mid-stream read failure some gateways terminate with, across
+    // its separator variants, plus the spelled-out TCP reset.
+    'Provider finish_reason: stream_read_error',
+    'stream read error',
+    'stream-read-error',
+    'Provider finish_reason: connection_reset',
+    // OpenAI SDK SyntaxError when an SSE `data:` line is cut mid-JSON frame.
+    'Unterminated string in JSON at position 32 (line 1 column 33)',
+    // Gateway-sanitized stream-interrupted notice.
+    "The model provider's stream was interrupted. Please retry.",
     'other side closed',
     'HTTP2 request did not get a response',
     'WebSocket closed unexpectedly',

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-07-22-pi-ai-transport-truncation-classification.md
-2026-07-22-pi-ai-transport-truncation-classification.md: b8edbb94d11e004b324dc1d4e76d4368bbafffea
-2026-07-22-pi-ai-transport-truncation-classification.zh.md: 95309a0623ce3504aa6b5199e1e33d09994215b7
+2026-07-22-pi-ai-transport-truncation-classification.md: cd3c40a935da2b3c29cb2597f9403b91d6e23e8e
+2026-07-22-pi-ai-transport-truncation-classification.zh.md: 30cccf9c38c6e26559a59d6217e16704873a04da
