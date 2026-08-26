@@ -214,3 +214,4 @@ pi-ai 事件会变为 harness 推理、文本、工具调用、usage 与 finish 
 - **历史中的 `system` 消息使用 pi-ai 通用上下文转换**：提供方特定位置由 pi-ai 决定，而非由 harness 拥有的协议覆盖决定。
 - **无法获取提供方 HTTP 状态**：pi-ai 错误事件不会在所有提供方上公开稳定 HTTP 状态；失败只公开稳定 harness 错误 code。
 - **重试策略由提供方持有，而不是 SDK 重试**：每个提供方 profile 都可以提供嵌套的 `retryPolicy`；省略时解析为 normal 模式并重试五次，`dsh-llm-retry` 会在 agent 的失败步骤扩展点上执行有效路由策略。pi-ai SDK 重试仍保持禁用，因此持久化的 agent 步骤与 `llm/retry` 事件记录每次可见尝试，直接 `ctx.llm.stream()` 调用仍只尝试一次。
+- **错误 code 从被扁平化的提供方消息文本中分类**：pi-ai 在终止事件之前就把捕获到的错误缩减为 `error.message`，并原样转交网关的 `finish_reason`，丢弃了原始 `Error` 及其 `cause` 链，因此 `classifyPiAiError` 只能按提供方措辞路由，而不是基于转发的 `code`/`cause`。某个 pi-ai 版本若改写传输错误措辞，或某个网关造出新的断开标记，都会静默回退到 `PI_AI_ERROR`，直到模式被更新；`stream.ts` 里的 `XXX` 注记标明了持久的修复方式。
