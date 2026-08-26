@@ -44,7 +44,9 @@ function classifyPiAiError(message: string): string {
   // same request cannot succeed, so it is invalid, not transient.
   if (/\b413\b|failed to buffer the request body:\s*length limit exceeded|payload too large|request body too large/i.test(message)) return 'INVALID_REQUEST'
   if (/\b400\b|invalid.?request/i.test(message)) return 'INVALID_REQUEST'
-  if (/\b5\d\d\b/.test(message)) return 'SERVER'
+  // Third-party overload text arrives as `server_error:` with no 5xx digit for
+  // the numeric form, so this rule also accepts that wording.
+  if (/\b5\d\d\b|\bserver[_\s-]?errors?\b/i.test(message)) return 'SERVER'
   if (/\btime(?:d)?\s*out\b|timeout/i.test(message)) return 'TIMEOUT'
   // A stream truncated before the provider's terminal event: each pi-ai provider
   // throws its own wording when the wire closes mid-response without a terminal
@@ -53,17 +55,25 @@ function classifyPiAiError(message: string): string {
   // finish_reason`). The connection dropped mid-response, so this is a transport
   // truncation, not a model-level error.
   if (/stream ended (?:before|without)\b/i.test(message)) return 'TRANSPORT'
-  // A gateway can also report the drop through its own terminal finish_reason:
-  // OpenAI's set is stop|length|tool_calls|content_filter|function_call, so
-  // `network_error` / `connection_error` / `socket_error` are provider-specific
-  // "upstream dropped" markers, and the word list accepts the `_error` suffix
-  // those reasons carry.
+  // Gateways also report drops through their own terminal finish_reason or
+  // normalized error text: OpenAI's finish_reason set is
+  // stop|length|tool_calls|content_filter|function_call, so `network_error` /
+  // `connection_error` / `socket_error` are provider-specific "upstream
+  // dropped" markers (the word list accepts their `_error` suffix),
+  // `stream_read_error` is a normalized mid-stream read failure with separator
+  // variants, and `connection_reset` is the spelled-out TCP reset beside the
+  // `ECONN[A-Z]+` forms.
   if (/\b(?:network|connection|socket|fetch)(?:_error)?\b|\bECONN[A-Z]+\b/i.test(message)
+    || /\bstream[_\s-]+read[_\s-]+error\b|\bconnection[_\s-]?reset\b/i.test(message)
     || /\b(?:other side closed|HTTP2 request did not get a response|WebSocket closed unexpectedly)\b/i.test(message)
     // undici renders a mid-stream socket drop as a bare `terminated` (its
     // `cause` — the real SocketError — was flattened away upstream); Node's
     // stream layer says `Premature close`.
-    || /\bterminated\b|premature close/i.test(message)) {
+    || /\bterminated\b|premature close/i.test(message)
+    // A frame cut mid-JSON surfaces the SDK parser's own SyntaxError instead of
+    // a pi-ai wording, and some gateways sanitize the drop to a generic
+    // "stream was interrupted" notice.
+    || /\bunterminated string in json\b|stream was interrupted/i.test(message)) {
     return 'TRANSPORT'
   }
   return 'PI_AI_ERROR'
