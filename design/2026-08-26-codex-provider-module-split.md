@@ -2,8 +2,9 @@
 
 Status: analysis + applied local fix · 2026-08-26 · profile `vscode`
 Affected deployment: this machine only (source-launched harness). npm-installed
-deployments are believed unaffected. Companion record: [PROFILE-NOTES.md](PROFILE-NOTES.md),
-section "2026-08-26".
+deployments are believed unaffected. Companion record:
+`~/.dsh/profiles/vscode/PROFILE-NOTES.md` (machine-local file outside this
+repository, section "2026-08-26").
 
 ## Summary
 
@@ -56,8 +57,9 @@ instance. With the instances split:
 
 Nothing logs. The fiber is genuinely active; every layer did what its own
 instance told it. A silent cross-instance identity break produces exactly the
-"works in tests, dead in production" shape the repository's postmortem 0001
-warns about, one level down: not a dropped export, but a dropped module share.
+"works in tests, dead in production" shape [postmortem
+0001](../docs/postmortem/0001-acp-default-export-drops-inject.md) warns about,
+one level down: not a dropped export, but a dropped module share.
 
 ## Evidence
 
@@ -86,9 +88,13 @@ import { Remote, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol/sr
 `./src/*` resolves through the same junction to the identical physical file the
 server loads, so realpath dedupe reunifies the instance regardless of tsconfig
 paths. The `.ts` extension is loadable because every import in this process
-runs through tsx. Trade-off: the plugin now depends on the host loading source
-(or at least being able to transpile `.ts`); acceptable for this profile,
-documented in PROFILE-NOTES, and reverted-by-upgrade (see warning there).
+runs through tsx. Two caveats keep this honest: the specifier is
+**deployment-local, not portable** — the published tarball ships no `src/`
+(`files` covers `dist` plus docs), so it works here only because the profile
+junction reaches into the repository workspace source; and the plugin now
+depends on the host being able to transpile `.ts`. Acceptable for this
+profile, documented in PROFILE-NOTES, and reverted-by-upgrade (see warning
+there).
 
 ## Alternatives considered
 
@@ -106,10 +112,12 @@ documented in PROFILE-NOTES, and reverted-by-upgrade (see warning there).
 
 For plugin authors (today): on deployments that launch from source, never rely
 on bare-specifier imports of `@deepseek-ai/*` packages for identity-bearing
-mechanisms (decorator registries, singletons, `instanceof`). Either pin the
-shared file via an explicit subpath that exists in both src and built worlds,
-or ride first-party seams that communicate through `ctx` state instead of
-module state.
+mechanisms (decorator registries, singletons, `instanceof`). An explicit
+subpath can reunite the instances, but only where every resolution world
+reaches the same physical file on that deployment — verify with
+`import.meta.resolve` from each importer before trusting it — otherwise ride
+first-party seams that communicate through `ctx` state instead of module
+state.
 
 For dsh core (upstream proposal): the browser client solved this exact problem
 with the platform module table — dynamic bundles request shared identity
