@@ -16,10 +16,10 @@ import {
   type KeyboardEvent, type FocusEvent,
 } from 'react'
 import clsx from 'clsx'
-import type { ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
+import type { ModelProviderGroup, ModelReasoningEffort, ModelSelection } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   IconCheckOutline16, IconChevronDownOutline14, IconChevronRightOutline14,
-  IconWarningOutline16, Toast,
+  IconCloseFill14, IconSearchOutline16, IconWarningOutline16, Toast,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
@@ -51,6 +51,9 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  // In-model-pane filter over the provider-grouped catalog; reset on every
+  // open so a reopened menu always starts from the full list.
+  const [search, setSearch] = useState('')
   // The in-menu error strip serves catalog loads (its Retry re-runs the
   // load); a rejected SELECTION announces through the transient toast
   // instead, so the strip renders only while the latest failure-capable
@@ -60,7 +63,7 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([])
+  const itemRefs = useRef<(HTMLButtonElement | HTMLInputElement | null)[]>([])
   const id = useId()
 
   const choices = useMemo(() => state.groups.flatMap(group =>
@@ -75,6 +78,24 @@ export function ModelSelect(
           : { reasoningEffort: model.reasoning.defaultEffort },
       } satisfies ModelSelection,
     }))), [state.groups])
+  // The filter narrows the rendered groups by the search text (case-folded).
+  // A group that itself matches (its provider name/id) keeps every model; a
+  // group whose name doesn't match shows only the models whose name, id, or
+  // description contains the text. An empty query is the unfiltered catalog.
+  const query = search.trim().toLowerCase()
+  const filteredGroups = useMemo<readonly ModelProviderGroup[]>(() => {
+    if (query === '') return state.groups
+    return state.groups.flatMap((group) => {
+      const groupMatch = group.name.toLowerCase().includes(query)
+        || group.id.toLowerCase().includes(query)
+      if (groupMatch) return [group]
+      const models = group.models.filter(model =>
+        model.name.toLowerCase().includes(query)
+        || model.id.toLowerCase().includes(query)
+        || (model.description?.toLowerCase().includes(query) ?? false))
+      return models.length === 0 ? [] : [{ ...group, models }]
+    })
+  }, [state.groups, query])
   const selectedIndex = state.current === null
     ? -1
     : choices.findIndex(c => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)
@@ -118,6 +139,7 @@ export function ModelSelect(
 
   const show = (): void => {
     setPane('root')
+    setSearch('')
     setOpen(true)
     reload()
   }
@@ -209,7 +231,7 @@ export function ModelSelect(
   let itemIndex = 0
   const itemRef = () => {
     const at = itemIndex++
-    return (node: HTMLButtonElement | null) => { itemRefs.current[at] = node }
+    return (node: HTMLButtonElement | HTMLInputElement | null) => { itemRefs.current[at] = node }
   }
 
   return (
@@ -264,6 +286,41 @@ export function ModelSelect(
 
           {pane === 'model' && (
             <>
+              <div className={css.search}>
+                <IconSearchOutline16 aria-hidden="true" />
+                <input
+                  ref={itemRef()}
+                  type="search"
+                  className={css.searchInput}
+                  value={search}
+                  placeholder={t('search.placeholder')}
+                  aria-label={t('search.label')}
+                  onChange={(event) => { setSearch(event.currentTarget.value) }}
+                  onKeyDown={(event) => {
+                    // Escape that beats a non-empty query clears it instead of
+                    // backing out of the pane; an empty query bubbles to the
+                    // root handler's pane-back gesture.
+                    if (event.key === 'Escape' && search !== '') {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      setSearch('')
+                    }
+                  }}
+                />
+                {search !== '' && (
+                  <button
+                    type="button"
+                    className={css.searchClear}
+                    aria-label={t('search.clear')}
+                    onClick={() => {
+                      setSearch('')
+                      itemRefs.current[0]?.focus()
+                    }}
+                  >
+                    <IconCloseFill14 />
+                  </button>
+                )}
+              </div>
               {state.status === 'loading' && (
                 <div className={css.status}>{t('status.loading')}</div>
               )}
@@ -280,7 +337,7 @@ export function ModelSelect(
                 </div>
               ))}
               <div className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
+                {filteredGroups.map((group) => {
                   const headingId = `${id}-${group.id}`
                   return (
                     <section role="group" aria-labelledby={headingId} className={css.group} key={group.id}>
@@ -314,6 +371,9 @@ export function ModelSelect(
               </div>
               {state.status === 'ready' && choices.length === 0 && (
                 <div className={css.empty}>{t('empty.models')}</div>
+              )}
+              {state.status === 'ready' && choices.length > 0 && filteredGroups.length === 0 && (
+                <div className={css.empty}>{t('empty.search')}</div>
               )}
             </>
           )}

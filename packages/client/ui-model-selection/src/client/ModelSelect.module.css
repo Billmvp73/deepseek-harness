@@ -104,6 +104,69 @@
   line-height: 20px;
 }
 
+/* In-model-pane search field: a bordered text row over the menu surface,
+   mirroring the ui-primitives Input atom's tokens and chrome. */
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 2px 4px;
+  padding: 0 8px;
+  height: 32px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.search:focus-within {
+  border-color: var(--dsw-alias-brand-primary);
+}
+
+.searchInput {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.searchInput::placeholder {
+  color: var(--dsw-alias-label-dimmed);
+}
+
+/* Hide the native type=search cancel affordance; the custom clear button
+   below is the only dismissal surface. */
+.searchInput::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.searchClear {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.searchClear:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+
+.searchClear:focus-visible {
+  box-shadow: 0 0 0 2px var(--dsw-alias-border-l3);
+}
+
 .error,
 .warning {
   display: flex;
