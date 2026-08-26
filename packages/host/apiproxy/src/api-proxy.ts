@@ -1828,7 +1828,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
    * @returns `ignored` when the cwd is not inside a git repository (the flag
    *   does not apply and the prompt proceeds in place); `refused` when the
    *   relocation itself failed (nothing reached the model); otherwise the new
-   *   worktree session's agent and id.
+   *   worktree session's agent and id PLUS `rollback` — ownership transfers
+   *   to the caller, which MUST invoke it on every subsequent pre-delivery
+   *   refusal so a failed prompt leaves no orphaned worktree.
    */
   async function relocatePromptToNewWorktree(
     request: RpcRequest<unknown>,
@@ -1836,7 +1838,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
   ): Promise<
     { ignored: true }
     | { refused: RpcResponse<ResponseValue<'session.prompt'>> }
-    | { agent: Agent; sessionId: SessionId }
+    | { agent: Agent; sessionId: SessionId; rollback: () => Promise<void> }
   > {
     const cwd = agent.session.header.cwd ?? defaults.cwd
     let created: CreatedWorktree | undefined
@@ -1906,7 +1908,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }) }
       }
     }
-    return { agent: moved, sessionId: newSessionId }
+    return { agent: moved, sessionId: newSessionId, rollback }
   }
 
   /** Missing-service report shared by the settings domain (skills-domain stance). */
@@ -2479,12 +2481,14 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // relocates — the flag is a start-in-a-worktree intent, never a
         // mid-conversation move.
         let movedSessionId: SessionId | undefined
+        let rollbackRelocation: (() => Promise<void>) | undefined
         if (newWorktree === true && sessionBlank(agent.session)) {
           const relocation = await relocatePromptToNewWorktree(request, agent)
           if ('refused' in relocation) return relocation.refused
           if (!('ignored' in relocation)) {
             agent = relocation.agent
             movedSessionId = relocation.sessionId
+            rollbackRelocation = relocation.rollback
           }
         }
         // Request identity and optional browser zone ride the exact durable user message.
@@ -2494,17 +2498,26 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
         }
         const hasImage = content.some(part => part.type === 'image')
+        // Relocation ownership: any admission refusal below must roll the
+        // freshly created worktree back, or a failed prompt leaves orphaned
+        // git state (a directory plus a branch) on the user's machine.
+        const admitRefusal = async (
+          refusal: RpcResponse<ResponseValue<'session.prompt'>>,
+        ): Promise<RpcResponse<ResponseValue<'session.prompt'>>> => {
+          if (rollbackRelocation !== undefined) await rollbackRelocation()
+          return refusal
+        }
         const admit = async (): Promise<RpcResponse<ResponseValue<'session.prompt'>>> => {
           try {
             if (hasImage) {
               const current = selectionFor(agent).current
               const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
               if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
-                return err(request, {
+                return await admitRefusal(err(request, {
                   code: 'attachment-error',
                   message: `Model "${current.model}" does not support image input.`,
                   details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
-                })
+                }))
               }
             }
             const durable = await durablePromptContent(ctx, content)
@@ -2513,17 +2526,17 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             else agent.followup(message)
           } catch (error: unknown) {
             if (error instanceof AttachmentError) {
-              return err(request, {
+              return await admitRefusal(err(request, {
                 code: 'attachment-error',
                 message: error.message,
                 details: { reason: error.code },
-              })
+              }))
             }
-            return err(request, {
+            return await admitRefusal(err(request, {
               code: 'agent-busy',
               message: 'prompt rejected',
               details: { reason: String(error) },
-            })
+            }))
           }
           return ok(request, {
             accepted: true as const,

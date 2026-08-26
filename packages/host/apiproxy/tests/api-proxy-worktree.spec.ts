@@ -68,6 +68,8 @@ async function harness(cwd: string, faults: {
   failAttach?: boolean
   /** The workspace registry's list throws (workspace resolution fails). */
   throwWorkspaceList?: boolean
+  /** The relocated agent's followup rejects (post-relocation admission failure). */
+  failFollowup?: boolean
 } = {}): Promise<{
   ctx: Context
   sessionId: SessionId
@@ -111,7 +113,10 @@ async function harness(cwd: string, faults: {
         ctx: ownerCtx,
         inbox: { nextTurn: [], nextStep: [] },
       } as unknown as Agent
-      Object.assign(createdAgent, { followup: movedFollowup, steer: vi.fn(), cancel: vi.fn() })
+      const createdFollowup = faults.failFollowup === true
+        ? (): never => { throw new Error('agent busy') }
+        : movedFollowup
+      Object.assign(createdAgent, { followup: createdFollowup, steer: vi.fn(), cancel: vi.fn() })
       ownerCtx.agents.register(createdAgent)
       return { agent: createdAgent, dispose: () => Promise.resolve() }
     },
@@ -308,6 +313,32 @@ describe('session.prompt newWorktree relocation', () => {
     // (git keeps the now-empty parent directory itself).
     expect(ctx.sessions.get(details.sessionId)).toBeDefined()
     expect(response.result.ok).toBe(false)
+    const branches = await run('git', ['-C', repo, 'branch', '--list', 'wt-*'])
+    expect(branches.stdout.trim()).toBe('')
+    const parents = await readdir(join(repo, '..'))
+    const leftoverEntries = (await Promise.all(parents
+      .filter(name => name.startsWith(`${basename(repo)}.worktrees`))
+      .map(name => readdir(join(repo, '..', name))))).flat()
+    expect(leftoverEntries).toEqual([])
+    await ctx.fiber.dispose()
+  }, 20_000)
+
+  it('rolls the worktree back when post-relocation admission refuses (agent-busy)', async () => {
+    const repo = await initRepo(true)
+    roots.push(join(repo, '..'))
+    const { ctx, sessionId } = await harness(repo, { failFollowup: true })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: tmpdir(),
+    })
+    const response = await api.sessions.prompt(request({
+      sessionId, mode: 'queue' as const, content: [{ type: 'text' as const, text: '开工' }], newWorktree: true,
+    }))
+    // Admission happens AFTER relocation succeeds, so this refusal path is the
+    // ownership-transfer case: the worktree must still be rolled back.
+    expect(response.result.ok).toBe(false)
+    if (response.result.ok) throw new Error('expected failure')
+    expect(response.result.error).toMatchObject({ code: 'agent-busy' })
     const branches = await run('git', ['-C', repo, 'branch', '--list', 'wt-*'])
     expect(branches.stdout.trim()).toBe('')
     const parents = await readdir(join(repo, '..'))
