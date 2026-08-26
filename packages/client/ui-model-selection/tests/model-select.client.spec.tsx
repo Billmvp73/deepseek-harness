@@ -167,6 +167,72 @@ describe('ModelSelect reasoning effort', () => {
     expect(screen.queryByRole('button', { name: '重试' })).toBeNull()
   })
 
+  it('filters the provider-grouped catalog by the search text and clears it', () => {
+    const groups = [
+      {
+        id: 'deepseek',
+        name: 'DeepSeek',
+        models: [
+          { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash' },
+          { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro' },
+        ],
+      },
+      {
+        id: 'openrouter',
+        name: 'OpenRouter',
+        models: [
+          { id: 'anthropic/claude-3-5-sonnet', name: 'Claude 3.5 Sonnet', description: 'Anthropic' },
+          { id: 'openai/gpt-4o', name: 'GPT-4o' },
+        ],
+      },
+    ]
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'deepseek', model: 'deepseek-v4-flash' },
+      groups,
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', {
+      name: '选择模型，当前 DeepSeek-V4-Flash',
+    }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const search = screen.getByRole('searchbox', { name: '搜索模型' })
+
+    // Name match is case-folded.
+    fireEvent.change(search, { target: { value: 'pro' } })
+    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
+      .toEqual(['DeepSeek-V4-Pro'])
+
+    // Model id and description both match.
+    fireEvent.change(search, { target: { value: 'claude' } })
+    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
+      .toEqual(['Claude 3.5 SonnetAnthropic'])
+    fireEvent.change(search, { target: { value: 'anthropic' } })
+    expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
+      .toEqual(['Claude 3.5 SonnetAnthropic'])
+
+    // A provider name match keeps every model in that group.
+    fireEvent.change(search, { target: { value: 'openrouter' } })
+    expect(screen.getAllByRole('menuitemradio').map(item => item.getAttribute('title')))
+      .toEqual(['Claude 3.5 Sonnet', 'GPT-4o'])
+
+    // A no-match query announces the empty-search state without hiding the search box.
+    fireEvent.change(search, { target: { value: 'no-such-model' } })
+    expect(screen.queryAllByRole('menuitemradio')).toHaveLength(0)
+    expect(screen.getByText('没有匹配的模型。')).toBeTruthy()
+
+    // Clearing the query restores the unfiltered catalog.
+    fireEvent.change(search, { target: { value: '' } })
+    expect(screen.getAllByRole('menuitemradio')).toHaveLength(4)
+  })
+
   it('renders no Agent-bound control for an addressed subagent session', () => {
     const load = vi.fn()
     render(<ModelSelect
