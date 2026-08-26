@@ -187,6 +187,7 @@ export interface SessionErrorDetailsMap {
   }
   'invalid-time-zone': { readonly value: string }
   'workspace-attach-failed': { readonly sessionId: SessionId; readonly workspaceId: string }
+  'worktree-failed': { readonly cwd: string; readonly worktree?: string }
   'workspace-not-found': { readonly workspaceId: string }
   'agent-preset-conflict': {
     readonly sessionId: SessionId
@@ -321,11 +322,15 @@ export interface SessionPromptRequest {
   readonly mode: 'queue' | 'steer'
   readonly content: readonly PromptContentPart[]
   readonly clientTimeZone?: string
+  /** Relocate a blank session's first prompt into a fresh linked git worktree. */
+  readonly newWorktree?: boolean
 }
 
 /** Receipt after one prompt enters the target Agent inbox. */
 export interface SessionPromptValue {
   readonly accepted: true
+  /** New Session identity when the prompt was relocated to a worktree. */
+  readonly sessionId?: SessionId
 }
 
 /** Durable image read request. */

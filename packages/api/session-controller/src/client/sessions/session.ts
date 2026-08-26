@@ -58,6 +58,8 @@ export interface SessionOptions {
    * (hidden, still reusable by connectWorkspace).
    */
   onEngaged?(session: Session): void
+  /** Called when a blank Session's first prompt moved to a fresh worktree Session. */
+  onMoved?(sessionId: SessionId): void
   /**
    * Manager-owned projection value store to adopt (frames route through the
    * manager and values outlive instantiation); omitted, the Session owns a
@@ -207,14 +209,16 @@ export class Session implements SessionFace {
    * @param mode - queue appends after the current turn; steer interrupts it.
    * @param signal - optional caller cancellation for the complete admission round-trip.
    * @param requestId - identity from {@link beginSubmission}; a failed identified prompt retires its echo.
-   * @returns the prompt result (also mirrored into promptError on failure).
+   * @param opts - request-local worktree relocation intent.
+   * @returns the prompt result, including the moved Session id after relocation.
    */
   async prompt(
     content: PromptContentPart[],
     mode: 'queue' | 'steer',
     signal?: AbortSignal,
     requestId?: SessionRequestId,
-  ): Promise<ClientResult<{ accepted: true }>> {
+    opts?: { newWorktree?: boolean },
+  ): Promise<ClientResult<{ accepted: true; sessionId?: SessionId }>> {
     this.promptError = null
     this.lastAgentError = null
     // Synchronous, before the first await: the blank → engaging edge must be
@@ -223,7 +227,7 @@ export class Session implements SessionFace {
     this.promptAttempted = true
     if (this.blankBit) this.firstPromptPendingTurn = true
     this.notifier.markDirty()
-    let result: ClientResult<{ accepted: true }>
+    let result: ClientResult<{ accepted: true; sessionId?: SessionId }>
     try {
       if (this.address === undefined) {
         const clientTimeZone = resolvedClientTimeZone()
@@ -233,6 +237,7 @@ export class Session implements SessionFace {
           mode,
           content,
           clientTimeZone,
+          ...(opts?.newWorktree === true ? { newWorktree: true } : {}),
         }, signal))
       } else if (this.address.mode === 'one-shot') {
         result = {
@@ -274,6 +279,12 @@ export class Session implements SessionFace {
       if (requestId !== undefined) this.retireFailedSubmission(requestId)
       this.promptError = { op: 'send', error: result.error }
       this.notifier.markDirty()
+      return result
+    }
+    const movedTo = result.value.sessionId
+    if (movedTo !== undefined && movedTo !== this.sessionId) {
+      if (requestId !== undefined) this.finishSubmission(requestId, { reason: 'observed', attachments: [] })
+      this.options.onMoved?.(movedTo)
       return result
     }
     // Blank flips on ACCEPTANCE, not attempt: an accepted prompt starts the

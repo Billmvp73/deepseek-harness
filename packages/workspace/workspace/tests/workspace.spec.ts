@@ -134,6 +134,7 @@ function record(path: string, sessionIds: string[], createdAt = '2026-07-24T00:0
     path,
     title: basename(path),
     sessionIds: sessionIds.map(SessionId),
+    worktreePaths: [],
     createdAt,
     updatedAt: createdAt,
   }
@@ -712,6 +713,41 @@ describe('Workspace session ordering', () => {
     await expect(workspace.attachSession(SessionId('file'))).rejects.toThrow(/not a directory/)
     await expect(workspace.attachSession(SessionId('unknown'))).rejects.toThrow(/no such session/)
     expect(workspace.sessionIds).toEqual([])
+  })
+
+  it('accounts a session in a linked worktree after addWorktree registers the path', async () => {
+    const dir = await makeDir('worktree-root')
+    const worktree = await makeDir('worktree-linked')
+    const result = await harness()
+    result.setSessions([header('wt', worktree, 1)])
+    const workspace = await result.registry.create(dir)
+    // Not yet linked: a session whose cwd is a sibling directory is outside
+    // membership and rejects like any cwd mismatch.
+    await expect(workspace.attachSession(SessionId('wt'))).rejects.toThrow(/resolves to/)
+    expect(workspace.worktreePaths).toEqual([])
+    // Registering the worktree grants membership; the session then attaches.
+    await workspace.addWorktree(worktree)
+    expect(workspace.worktreePaths).toEqual([worktree])
+    await workspace.attachSession(SessionId('wt'))
+    expect(workspace.sessionIds).toEqual(['wt'])
+    expect(storedRecord(result.pool, workspace.id).worktreePaths).toEqual([worktree])
+    // Re-registering the same path is a no-op (no second write).
+    const written = result.changes.length
+    await workspace.addWorktree(worktree)
+    expect(result.changes).toHaveLength(written)
+    expect(workspace.worktreePaths).toEqual([worktree])
+  })
+
+  it('rejects addWorktree for a missing or non-directory path', async () => {
+    const dir = await makeDir('worktree-invalid-root')
+    const gone = await makeDir('worktree-invalid-gone')
+    const file = join(base, 'worktree-invalid-file')
+    await writeFile(file, 'file')
+    await rm(gone, { recursive: true })
+    const workspace = await (await harness()).registry.create(dir)
+    await expect(workspace.addWorktree(gone)).rejects.toThrow(/does not resolve/)
+    await expect(workspace.addWorktree(file)).rejects.toThrow(/not a directory/)
+    expect(workspace.worktreePaths).toEqual([])
   })
 
   it('decides detach/attach membership at domain write-chain slots', async () => {

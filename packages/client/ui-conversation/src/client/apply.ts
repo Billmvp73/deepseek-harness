@@ -30,6 +30,7 @@ import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
+import { WorktreeLabel } from './skeleton/WorktreeLabel.tsx'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
 
@@ -189,7 +190,9 @@ export function apply(ctx: Context): void {
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
+        newWorktreeSessions: concreteConversation(ctx).newWorktreeSessions,
       },
+      toggleNewWorktree: (id, enabled) => { concreteConversation(ctx).setNewWorktree(id, enabled) },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaceNavigation.connectWorkspace(workspaceId)
         if (sessionId !== undefined && nextId !== sessionId) {
@@ -238,6 +241,13 @@ export function apply(ctx: Context): void {
       open: (id) => { sessions.open(id) },
     }),
   }, ConversationSessionHeader)
+
+  const registerWorktreeLabel = () => slots.register({
+    name: 'conversation.session.header.actions',
+    id: 'worktree-label',
+    order: -9,
+    locale: NS,
+  }, WorktreeLabel)
 
   const registerComposerBar = () => slots.register({
     name: 'conversation.composer.bar',
@@ -327,6 +337,7 @@ export function apply(ctx: Context): void {
     yield registerConversationRoot()
     yield registerConversationSession()
     yield registerConversationHeader()
+    yield registerWorktreeLabel()
     yield registerComposerBar()
   })
 

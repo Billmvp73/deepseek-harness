@@ -25,6 +25,8 @@
   - img
   - text: workspace
   - img
+- checkbox "New worktree"
+- text: New worktree
 - button "Standard mode":
   - img
   - text: Standard mode

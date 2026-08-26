@@ -16,6 +16,7 @@ import { SessionQueryError, type SessionObservation } from '@deepseek-ai/dsh-ses
 import { SessionTitleInvalidError } from '@deepseek-ai/dsh-session-title'
 import { TypertRemoteFailure } from '@deepseek-ai/dsh-typert-protocol'
 import type { Workspace } from '@deepseek-ai/dsh-workspace'
+import { createGitWorktree, removeGitWorktree, type CreatedWorktree } from './worktree.ts'
 import {
   ApiSessionAgentController,
   ApiSessionCwdConflict,
@@ -276,6 +277,81 @@ export class SessionCommandController {
   }
 
   /**
+   * Relocate a blank Session's first prompt into a fresh linked git worktree.
+   * @param source - blank source Agent whose preset and selection move with the prompt.
+   * @returns the moved Agent and rollback owner, or `undefined` outside a repository.
+   */
+  private async relocatePrompt(source: Agent): Promise<{
+    readonly agent: Agent
+    readonly sessionId: SessionId
+    readonly rollback: () => Promise<void>
+  } | undefined> {
+    const cwd = source.session.header.cwd ?? this.defaultCwd
+    let created: CreatedWorktree | undefined
+    const rollback = async (): Promise<void> => {
+      if (created === undefined) return
+      try {
+        await removeGitWorktree(created)
+      } catch (error) {
+        this.ctx.logger.warn(`new-worktree rollback for "${created.path}" failed (left in place): ${String(error)}`)
+      }
+    }
+    try {
+      created = await createGitWorktree(cwd) ?? undefined
+    } catch (error) {
+      reject(
+        'worktree-failed',
+        `failed to create a new git worktree for session "${source.session.id}" in "${cwd}": ${String(error)}`,
+        { cwd },
+      )
+    }
+    if (created === undefined) return undefined
+    const sessionId = SessionId(`session-${randomUUID()}`)
+    let moved: Agent
+    try {
+      moved = await this.agents.ensureSession(
+        sessionId,
+        created.path,
+        false,
+        this.agents.presetForSession(source.session),
+      )
+    } catch (error) {
+      await rollback()
+      reject(
+        'worktree-failed',
+        `worktree "${created.path}" was created for session "${source.session.id}" but the session could not start there: ${String(error)}`,
+        { cwd, worktree: created.path },
+      )
+    }
+    this.agents.selectForNextRequest(moved, { ...this.agents.selectionFor(source).current })
+    let workspace: Workspace | undefined
+    try {
+      workspace = await this.forkWorkspace(source.session.header)
+    } catch (error) {
+      await rollback()
+      reject(
+        'internal',
+        `failed to resolve the source workspace for session "${source.session.id}": ${String(error)}`,
+        {},
+      )
+    }
+    if (workspace !== undefined) {
+      try {
+        await workspace.addWorktree(created.path)
+        await workspace.attachSession(sessionId)
+      } catch (error) {
+        await rollback()
+        reject(
+          'workspace-attach-failed',
+          `session "${sessionId}" was created in worktree "${created.path}" but could not attach to workspace "${workspace.id}": ${String(error)}`,
+          { sessionId, workspaceId: workspace.id },
+        )
+      }
+    }
+    return { agent: moved, sessionId, rollback }
+  }
+
+  /**
    * Admit one browser prompt after explicit Agent resume and image validation.
    * @param request - Session identity, prompt content, source metadata, and delivery mode.
    * @returns acknowledgement that the Agent accepted the prompt.
@@ -291,7 +367,7 @@ export class SessionCommandController {
         { value: request.clientTimeZone },
       )
     }
-    const agent = await this.resolveAgent(request.sessionId)
+    let agent = await this.resolveAgent(request.sessionId)
     const selection = this.agents.selectionFor(agent).current
     if (!routeServed(this.ctx, selection.provider)) {
       reject(
@@ -299,6 +375,16 @@ export class SessionCommandController {
         `no adapter serves provider "${selection.provider}"; select a model for this session`,
         { provider: selection.provider, model: selection.model },
       )
+    }
+    let movedSessionId: SessionId | undefined
+    let rollbackRelocation: (() => Promise<void>) | undefined
+    if (request.newWorktree === true && sessionBlank(agent)) {
+      const relocation = await this.relocatePrompt(agent)
+      if (relocation !== undefined) {
+        agent = relocation.agent
+        movedSessionId = relocation.sessionId
+        rollbackRelocation = relocation.rollback
+      }
     }
     const source: MessageSource = {
       kind: 'user',
@@ -324,13 +410,14 @@ export class SessionCommandController {
         if (request.mode === 'steer') agent.steer(message)
         else agent.followup(message)
       } catch (error) {
+        if (rollbackRelocation !== undefined) await rollbackRelocation()
         if (error instanceof TypertRemoteFailure) throw error
         if (error instanceof AttachmentError) {
           reject('attachment-error', error.message, { reason: error.code })
         }
         reject('agent-busy', 'prompt rejected', { reason: String(error) })
       }
-      return { accepted: true }
+      return { accepted: true, ...(movedSessionId === undefined ? {} : { sessionId: movedSessionId }) }
     }
     return hasImage ? this.agents.serializeImageAdmission(agent, admit) : admit()
   }
@@ -501,6 +588,11 @@ export class SessionCommandController {
     }
     return undefined
   }
+}
+
+/** Whether an Agent's Session has not started its first turn. */
+function sessionBlank(agent: Agent): boolean {
+  return !agent.session.events.some(event => event.type === 'turn/start')
 }
 
 function rejectFailure(error: { readonly code: string; readonly message: string; readonly details: object }): never {

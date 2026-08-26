@@ -77,14 +77,16 @@ export interface ISession {
    * @param mode - 'queue' appends a turn; 'steer' interrupts the running one.
    * @param signal - optional caller cancellation for the complete admission round-trip.
    * @param requestId - identity from {@link beginSubmission}; a failed identified prompt retires its echo.
-   * @returns acceptance, or the business error (also mirrored into snapshot.promptError).
+   * @param opts - request-local send options. `newWorktree` relocates a still-blank session's first turn.
+   * @returns acceptance, including the moved-to Session id after relocation, or the business error.
    */
   prompt(
     content: PromptContentPart[],
     mode: 'queue' | 'steer',
     signal?: AbortSignal,
     requestId?: SessionRequestId,
-  ): Promise<ClientResult<{ accepted: true }>>
+    opts?: { newWorktree?: boolean },
+  ): Promise<ClientResult<{ accepted: true; sessionId?: SessionId }>>
   /**
    * Resolve one durable image referenced by this session.
    * @param attachmentId - opaque id found in the folded session log.

@@ -22,6 +22,8 @@ English | [中文](README.zh.md)
 
 -----
 
+The blank-session Hero row carries a "New worktree" checkbox between the Workspace chip and the preset chip. Checked, the session's first send adds request-local `newWorktree` provenance to `session.prompt`: the Host creates a fresh git worktree of the session repository, registers it as a linked worktree of the source Workspace, and starts the work in a new session there — the client follows the response's `sessionId` (the runtime merges the row and moves the selection) and the session stays in the original workspace group. The active-session header shows a small worktree branch chip beside the agent-preset label (a `conversation.session.header.actions` entry deriving the branch from the session's `cwd`, presentation-only). A cwd outside a git repository ignores the flag, so the checkbox is safe to leave on; the Host is the authority on both the repository check and the relocation. The intent is per-session state on the ConversationController (the inject hooks compartment carries the observable set), never durable settings.
+
 <a id="conversation-assembly"></a>
 ## Conversation assembly
 

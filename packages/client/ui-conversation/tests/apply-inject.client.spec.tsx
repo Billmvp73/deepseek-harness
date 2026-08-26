@@ -107,7 +107,7 @@ describe('Conversation inject API', () => {
     expect(state.getSnapshot().draft).toBe('')
     await vi.waitFor(() => {
       expect(b.sessionFake.prompt).toHaveBeenCalledWith(
-        [{ type: 'text', text: 'hello' }], 'queue', expect.any(AbortSignal), expect.any(String),
+        [{ type: 'text', text: 'hello' }], 'queue', expect.any(AbortSignal), expect.any(String), undefined,
       )
     })
 
@@ -175,6 +175,17 @@ describe('Conversation inject API', () => {
     expect(b.runtime.sessions.calls).toContainEqual({ method: 'open', args: [other] })
     expect(state.getSnapshot().draft).toBe('')
     expect(b.inputApi(other).state.getSnapshot().draft).toBe('carry me')
+    await b.runtime.dispose()
+  })
+
+  it('carries the new-worktree flag store and toggle on the resident inject face', async () => {
+    const b = await bench()
+    const resident = b.residentApi(ROOT)
+    expect(resident.hooks.newWorktreeSessions.getSnapshot().has(ROOT)).toBe(false)
+    resident.toggleNewWorktree(ROOT, true)
+    expect(resident.hooks.newWorktreeSessions.getSnapshot().has(ROOT)).toBe(true)
+    resident.toggleNewWorktree(ROOT, false)
+    expect(resident.hooks.newWorktreeSessions.getSnapshot().has(ROOT)).toBe(false)
     await b.runtime.dispose()
   })
 

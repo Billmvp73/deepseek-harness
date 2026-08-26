@@ -216,8 +216,15 @@ export type ConvViewProps = PropsRuntime<'conversation.view'>
 export interface ConversationInjected {
   /** Connect and open a blank Session in the selected Workspace. */
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
-  /** Session-addressed composer block source, or the stable absent source. */
-  hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  /** Set one session's new-worktree send intent from the hero checkbox. */
+  toggleNewWorktree: (sessionId: SessionId, enabled: boolean) => void
+  /** Framework-bound composer block and new-worktree intent sources. */
+  hooks: {
+    /** Session-addressed composer block source, or the stable absent source. */
+    composerBlock: ObservableSnapshot<ComposerBlock | undefined>
+    /** Sessions whose hero new-worktree checkbox is checked. */
+    newWorktreeSessions: ObservableSnapshot<ReadonlySet<SessionId>>
+  }
 }
 
 /** Business callbacks injected into the strict Session body. */

@@ -22,6 +22,8 @@ kind: "package-reference"
 
 -----
 
+空白会话的 Hero 行在 Workspace chip 与预设 chip 之间有一个"新建 worktree"复选框。勾选后，该会话的首次发送会在 `session.prompt` 上附加请求本地的 `newWorktree` 来源信息：Host 在会话所在仓库创建一个全新的 git worktree，把它注册为源工作区的 linked worktree，并在那里以一个新会话开始工作；客户端跟随响应中的 `sessionId`（运行时会合入列表行并转移选中项），会话仍留在原始工作区分组。活跃会话的页头会在预设标签旁显示一个小 worktree 分支 chip（一个 `conversation.session.header.actions` 条目，纯展示地从会话 `cwd` 派生分支）。cwd 不在 git 仓库内时宿主忽略该标记，因此复选框可以一直开着；仓库判定与迁移都以宿主为权威。该意图是 ConversationController 上的按会话状态（inject hooks 舱携带可观察集合），不是持久化设置。
+
 <a id="conversation-assembly"></a>
 ## Conversation 组装
 

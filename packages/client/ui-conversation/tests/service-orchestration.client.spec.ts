@@ -50,6 +50,27 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
+  it('turns the hero new-worktree intent into the prompt send options', async () => {
+    const b = await bench()
+    const session = b.runtime.sessions.binding('s1')!.session
+    const sessionId = b.runtime.sessions.behavior('s1').sessionId
+    await b.root.sendSession(session, '就地', [], 'queue')
+    expect(b.prompt).toHaveBeenLastCalledWith(
+      [{ type: 'text', text: '就地' }], 'queue', undefined, expect.any(String), undefined,
+    )
+    b.root.setNewWorktree(sessionId, true)
+    await b.root.sendSession(session, '开工', [], 'queue')
+    expect(b.prompt).toHaveBeenLastCalledWith(
+      [{ type: 'text', text: '开工' }], 'queue', undefined, expect.any(String), { newWorktree: true },
+    )
+    b.root.setNewWorktree(sessionId, false)
+    await b.root.sendSession(session, 'again', [], 'queue')
+    expect(b.prompt).toHaveBeenLastCalledWith(
+      [{ type: 'text', text: 'again' }], 'queue', undefined, expect.any(String), undefined,
+    )
+    await b.runtime.dispose()
+  })
+
   it('folds Session business failures into callback rejections', async () => {
     const b = await bench()
     b.prompt.mockResolvedValueOnce({ ok: false, error: { code: 'agent-busy', message: 'busy', details: {} } } as never)
@@ -198,6 +219,7 @@ describe('sendSession submission echo', () => {
         'queue',
         undefined,
         'req-echo',
+        undefined,
       )
       // The draft stays registered until the echo's observed retirement.
       expect(b.root.draftImages([attachment!.id])).toHaveLength(1)
@@ -291,7 +313,9 @@ describe('sendSession submission echo', () => {
     try {
       const session = b.runtime.sessions.binding('s1')!.session
       await expect(b.root.sendSession(session, '纯文本', [], 'queue')).resolves.toEqual({ kind: 'success' })
-      expect(b.prompt).toHaveBeenCalledWith([{ type: 'text', text: '纯文本' }], 'queue', undefined, 'req-echo')
+      expect(b.prompt).toHaveBeenCalledWith(
+        [{ type: 'text', text: '纯文本' }], 'queue', undefined, 'req-echo', undefined,
+      )
     } finally {
       vi.unstubAllGlobals()
       b.restore()
@@ -307,7 +331,9 @@ describe('sendSession submission echo', () => {
       const sending = b.root.sendSession(session, '后台标签', [], 'queue')
       expect(b.prompt).not.toHaveBeenCalled()
       await expect(sending).resolves.toEqual({ kind: 'success' })
-      expect(b.prompt).toHaveBeenCalledWith([{ type: 'text', text: '后台标签' }], 'queue', undefined, 'req-echo')
+      expect(b.prompt).toHaveBeenCalledWith(
+        [{ type: 'text', text: '后台标签' }], 'queue', undefined, 'req-echo', undefined,
+      )
     } finally {
       vi.unstubAllGlobals()
       b.restore()
@@ -329,7 +355,9 @@ describe('sendSession submission echo', () => {
     const prompt = vi.spyOn(session, 'prompt').mockResolvedValue({ ok: true, value: { accepted: true } })
     await expect(b.root.sendSession(session, '继续', [], 'queue')).resolves.toEqual({ kind: 'success' })
     expect(beginSubmission).not.toHaveBeenCalled()
-    expect(prompt).toHaveBeenCalledWith([{ type: 'text', text: '继续' }], 'queue', undefined)
+    expect(prompt).toHaveBeenCalledWith(
+      [{ type: 'text', text: '继续' }], 'queue', undefined, undefined, undefined,
+    )
     await b.runtime.dispose()
   })
 })

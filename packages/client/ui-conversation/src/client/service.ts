@@ -16,6 +16,7 @@ import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
 import type {
   ISessions, PendingSubmissionRetirement, SessionFace,
 } from '@deepseek-ai/dsh-api-session-controller/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import type { ComposerAttachment } from './contract/slots.ts'
@@ -149,6 +150,14 @@ export class ConversationController extends Service implements IConversation {
   readonly input: SessionInputResolver
   /** The per-session composer-block registry. */
   readonly blocks: ComposerBlocks
+  /**
+   * Sessions whose hero "new worktree" checkbox is checked: the send path
+   * turns the flag into the prompt's request-local `newWorktree` provenance,
+   * and the Host relocates a still-blank session's first turn into a fresh
+   * git worktree (ignored outside a repository). Bare observable source —
+   * the hero checkbox reads it through the inject hooks compartment.
+   */
+  readonly newWorktreeSessions = createSnapshotStore<ReadonlySet<SessionId>>(new Set())
   private readonly draftAttachments = new Map<DraftAttachmentId, ComposerAttachment>()
 
   /**
@@ -167,7 +176,29 @@ export class ConversationController extends Service implements IConversation {
         revokePreview(attachment.previewUrl)
       }
       this.draftAttachments.clear()
+      this.newWorktreeSessions.set(new Set())
     }, 'conversation draft attachments')
+  }
+
+  /**
+   * Set one session's new-worktree send intent (the hero checkbox write).
+   * @param sessionId - the session the checkbox addresses.
+   * @param enabled - checked state.
+   */
+  setNewWorktree(sessionId: SessionId, enabled: boolean): void {
+    const next = new Set(this.newWorktreeSessions.getSnapshot())
+    if (enabled) next.add(sessionId)
+    else next.delete(sessionId)
+    this.newWorktreeSessions.set(next)
+  }
+
+  /**
+   * Whether one session's new-worktree send intent is set.
+   * @param sessionId - the sending session.
+   * @returns the checked state at call time (event-handler read, not render).
+   */
+  newWorktreeRequested(sessionId: SessionId): boolean {
+    return this.newWorktreeSessions.getSnapshot().has(sessionId)
   }
 
   /**
@@ -207,10 +238,11 @@ export class ConversationController extends Service implements IConversation {
     if (attachments.length !== imageIds.length) {
       throw new Error('conversation.sendSession: one or more draft images are no longer available')
     }
+    const opts = this.newWorktreeRequested(session.sessionId) ? { newWorktree: true } : undefined
     if (session.getSnapshot().subagent !== null) {
       const uploaded = await this.serializeImages(attachments.map(attachment => attachment.file))
       const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
-      const result = await session.prompt(content, mode, signal)
+      const result = await session.prompt(content, mode, signal, undefined, opts)
       return result.ok ? { kind: 'success' } : { kind: 'error' }
     }
     let finishRetirement: ((retirement: PendingSubmissionRetirement) => void) | undefined
@@ -239,7 +271,7 @@ export class ConversationController extends Service implements IConversation {
       submission.abandon()
       throw error
     }
-    const result = await session.prompt(content, mode, signal, submission.requestId)
+    const result = await session.prompt(content, mode, signal, submission.requestId, opts)
     if (!result.ok) return { kind: 'error' }
     if (retirement !== undefined && (await retirement).reason !== 'observed') return { kind: 'error' }
     return { kind: 'success' }
