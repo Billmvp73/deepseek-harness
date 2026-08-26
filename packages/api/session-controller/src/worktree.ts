@@ -77,3 +77,17 @@ export async function removeGitWorktree(worktree: CreatedWorktree): Promise<void
   await git(['worktree', 'remove', '--force', worktree.path], worktree.repoPath)
   await git(['branch', '-D', worktree.branch], worktree.repoPath)
 }
+
+/**
+ * Best-effort rollback of a failed relocation: force-remove the created
+ * worktree directory and delete its branch, so an aborted prompt does not
+ * leave orphaned git state (a directory plus a branch pointing at HEAD)
+ * behind on the user's machine.
+ * @param worktree - the worktree {@link createGitWorktree} returned.
+ * @throws when git cannot remove the directory or delete the branch; callers
+ *   log this cleanup failure separately from the refusal that triggered it.
+ */
+export async function removeGitWorktree(worktree: CreatedWorktree): Promise<void> {
+  await git(['worktree', 'remove', '--force', worktree.path], worktree.repoPath)
+  await git(['branch', '-D', worktree.branch], worktree.repoPath)
+}

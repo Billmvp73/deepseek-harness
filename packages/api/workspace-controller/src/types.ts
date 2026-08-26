@@ -23,6 +23,8 @@ export interface WorkspaceView {
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
   readonly sessionIds: readonly SessionId[]
+  /** Canonical linked git worktree directories belonging to this Workspace. */
+  readonly worktreePaths: readonly string[]
   /** ISO-8601 creation instant. */
   readonly createdAt: string
   /** ISO-8601 last-mutation instant. */

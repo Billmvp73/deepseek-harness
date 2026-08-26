@@ -25,6 +25,7 @@ export function workspaceView(workspace: Workspace): WorkspaceView {
     path: workspace.path,
     title: workspace.title,
     sessionIds: [...workspace.sessionIds],
+    worktreePaths: [...workspace.worktreePaths],
     createdAt: workspace.createdAt,
     updatedAt: workspace.updatedAt,
   }
@@ -37,6 +38,7 @@ function changedWorkspaceView(workspaceId: string, value: unknown): WorkspaceVie
     path: record.path,
     title: record.title,
     sessionIds: [...record.sessionIds],
+    worktreePaths: [...record.worktreePaths],
     createdAt: record.createdAt,
     updatedAt: record.updatedAt,
   }

@@ -335,6 +335,7 @@ interface FixtureWorkspace {
   path: string
   title: string
   sessionIds: SessionId[]
+  worktreePaths: string[]
   createdAt: string
   updatedAt: string
 }
@@ -1898,6 +1899,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     path: '/tmp/fixture',
     title: 'fixture',
     sessionIds: [sid('fx-alpha'), sid('fx-beta'), sid('fx-gamma')],
+    worktreePaths: [],
     createdAt: fixtureEpoch,
     updatedAt: fixtureEpoch,
   }, {
@@ -1905,6 +1907,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     path: `${FIXTURE_HOME}/Documents/project`,
     title: 'project',
     sessionIds: [],
+    worktreePaths: [],
     createdAt: fixtureEpoch,
     updatedAt: fixtureEpoch,
   }]
@@ -1915,6 +1918,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   const workspaceSnapshot = (workspace: FixtureWorkspace): WorkspaceView => ({
     ...workspace,
     sessionIds: [...workspace.sessionIds],
+    worktreePaths: [...workspace.worktreePaths],
   })
   const workspaceBaseline = (): Extract<WorkspaceFollowFrame, { type: 'baseline' }> => ({
     type: 'baseline',
@@ -3257,6 +3261,7 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
         path: request.path,
         title: request.path.split('/').filter(Boolean).at(-1) ?? request.path,
         sessionIds: [],
+        worktreePaths: [],
         createdAt: now,
         updatedAt: now,
       }
