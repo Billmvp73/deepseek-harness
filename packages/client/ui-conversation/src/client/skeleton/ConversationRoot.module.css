@@ -356,6 +356,50 @@
   padding-left: 20px;
 }
 
+/* Hero new-worktree checkbox between the workspace chip and the preset chip:
+   same chip typography at rest, no fill (a checkbox carries its own state). */
+.newWorktree {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin: 0 8px;
+  min-height: 28px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+}
+
+.newWorktree input {
+  margin: 0;
+  accent-color: var(--dsw-alias-brand-primary, var(--dsw-alias-label-primary));
+  cursor: pointer;
+}
+
+/* Active-header worktree chip: a small branch badge beside the preset label,
+   muted like a caption so it does not compete with the session title. */
+.worktreeLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(100%, 360px);
+  padding: 0 6px;
+  border-radius: 12px;
+  color: var(--dsw-alias-label-caption);
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.worktreeIcon {
+  flex: none;
+  color: var(--dsw-alias-label-caption);
+}
+
 /* Hero: the composer sits inside the session scroll body; center there so
    the tree seat matches active (sticky footer) without a Root remount. */
 .root[data-phase='hero'] .scrollBody {

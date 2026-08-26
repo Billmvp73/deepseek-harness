@@ -13,6 +13,7 @@ import type { Context } from '@deepseek-ai/cordis'
 // error, so scope resolution goes through the sessions service (scopeOf
 // method) instead of the standalone helper.
 import type { ISessions, SessionFace, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
 import type { SubmitImageAttachment, SubmitOutcome } from '@deepseek-ai/dsh-client-ui-input-trigger/client'
 import type { ImageAttachmentRef, ImageMediaType } from '@deepseek-ai/dsh-attachment'
 import type { ComposerAttachment } from './contract/slots.ts'
@@ -94,6 +95,14 @@ export class ConversationController extends Service implements IConversation {
   readonly input: SessionInputResolver
   /** The per-session composer-block registry. */
   readonly blocks: ComposerBlocks
+  /**
+   * Sessions whose hero "new worktree" checkbox is checked: the send path
+   * turns the flag into the prompt's request-local `newWorktree` provenance,
+   * and the Host relocates a still-blank session's first turn into a fresh
+   * git worktree (ignored outside a repository). Bare observable source —
+   * the hero checkbox reads it through the inject hooks compartment.
+   */
+  readonly newWorktreeSessions = createSnapshotStore<ReadonlySet<SessionId>>(new Set())
   private readonly draftAttachments = new Map<DraftAttachmentId, ComposerAttachment>()
   private readonly imageUrls = new Map<string, ImageUrlEntry>()
   private readonly imageGenerations = new Map<SessionId, number>()
@@ -118,7 +127,29 @@ export class ConversationController extends Service implements IConversation {
       this.draftAttachments.clear()
       this.imageUrls.clear()
       this.imageGenerations.clear()
+      this.newWorktreeSessions.set(new Set())
     }, 'conversation attachment URL cache')
+  }
+
+  /**
+   * Set one session's new-worktree send intent (the hero checkbox write).
+   * @param sessionId - the session the checkbox addresses.
+   * @param enabled - checked state.
+   */
+  setNewWorktree(sessionId: SessionId, enabled: boolean): void {
+    const next = new Set(this.newWorktreeSessions.getSnapshot())
+    if (enabled) next.add(sessionId)
+    else next.delete(sessionId)
+    this.newWorktreeSessions.set(next)
+  }
+
+  /**
+   * Whether one session's new-worktree send intent is set.
+   * @param sessionId - the sending session.
+   * @returns the checked state at call time (event-handler read, not render).
+   */
+  newWorktreeRequested(sessionId: SessionId): boolean {
+    return this.newWorktreeSessions.getSnapshot().has(sessionId)
   }
 
   /**
@@ -155,7 +186,8 @@ export class ConversationController extends Service implements IConversation {
     }
     const uploaded = await this.serializeImages(attachments.map(attachment => attachment.file))
     const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
-    const result = await session.prompt(content, mode, signal)
+    const result = await session.prompt(content, mode, signal,
+      this.newWorktreeRequested(session.sessionId) ? { newWorktree: true } : undefined)
     if (!result.ok) return { kind: 'error' }
     this.releaseDraftImages(attachments)
     return { kind: 'success' }

@@ -554,6 +554,43 @@ describe('prompt and cancel errors', () => {
     expect(session.getSnapshot().composerPhase).toBe('engaging')
   })
 
+  it('forwards the newWorktree send intent as request-local prompt provenance', async () => {
+    const { api, session } = makeSession()
+    session.handleBlank(true)
+    await session.prompt([{ type: 'text', text: '在 worktree 里做' }], 'queue', undefined, { newWorktree: true })
+    expect(api.callsOf('session.prompt')[0]).toMatchObject({ sessionId: SID, newWorktree: true })
+  })
+
+  it('a moved prompt (newWorktree) notifies onMoved without flipping this session blank', async () => {
+    const movedTo = 'fk-wt-1' as SessionId
+    const api = new FakeApiClient()
+    api.onPrompt = () => Promise.resolve(ok({ accepted: true as const, sessionId: movedTo }))
+    const onEngaged = vi.fn()
+    const onMoved = vi.fn()
+    const session = new Session(SID, api, fakeRemote(), { conversation: TEST_CONVERSATION, onEngaged, onMoved })
+    session.handleBlank(true)
+    const result = await session.prompt([{ type: 'text', text: '开工' }], 'queue')
+    expect(result).toEqual({ ok: true, value: { accepted: true, sessionId: movedTo } })
+    expect(onMoved).toHaveBeenCalledWith(movedTo)
+    // The source log was never touched: it stays blank (hidden, reusable) and
+    // must not fire the engagement flip.
+    expect(onEngaged).not.toHaveBeenCalled()
+    expect(session.getSnapshot().blank).toBe(true)
+  })
+
+  it('an echo of this session id in the prompt value is not a move', async () => {
+    const api = new FakeApiClient()
+    api.onPrompt = () => Promise.resolve(ok({ accepted: true as const, sessionId: SID }))
+    const onEngaged = vi.fn()
+    const onMoved = vi.fn()
+    const session = new Session(SID, api, fakeRemote(), { conversation: TEST_CONVERSATION, onEngaged, onMoved })
+    session.handleBlank(true)
+    await session.prompt([{ type: 'text', text: '就地开工' }], 'queue')
+    expect(onMoved).not.toHaveBeenCalled()
+    expect(onEngaged).toHaveBeenCalledWith(session)
+    expect(session.getSnapshot().blank).toBe(false)
+  })
+
   it('lands cancel failures in promptError with op=stop', async () => {
     const { api, session } = makeSession()
     api.onCancel = () => Promise.reject(new Error('cancel transport down'))

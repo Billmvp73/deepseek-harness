@@ -51,6 +51,23 @@ describe('ConversationController', () => {
     await b.runtime.dispose()
   })
 
+  it('turns the hero new-worktree intent into the prompt send options', async () => {
+    const b = await bench()
+    const session = b.runtime.sessions.binding('s1')!.session
+    const sessionId = b.runtime.sessions.behavior('s1').sessionId
+    await b.root.sendSession(session, '就地', [], 'queue')
+    expect(b.prompt).toHaveBeenLastCalledWith([{ type: 'text', text: '就地' }], 'queue', undefined, undefined)
+    b.root.setNewWorktree(sessionId, true)
+    await b.root.sendSession(session, '开工', [], 'queue')
+    expect(b.prompt).toHaveBeenLastCalledWith(
+      [{ type: 'text', text: '开工' }], 'queue', undefined, { newWorktree: true },
+    )
+    b.root.setNewWorktree(sessionId, false)
+    await b.root.sendSession(session, 'again', [], 'queue')
+    expect(b.prompt).toHaveBeenLastCalledWith([{ type: 'text', text: 'again' }], 'queue', undefined, undefined)
+    await b.runtime.dispose()
+  })
+
   it('folds Session business failures into callback rejections', async () => {
     const b = await bench()
     b.prompt.mockResolvedValueOnce({ ok: false, error: { code: 'agent-busy', message: 'busy', details: {} } } as never)
