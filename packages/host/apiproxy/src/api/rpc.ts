@@ -92,6 +92,8 @@ export interface RpcErrorDetailsMap {
   'subagent-not-resumable': { childSessionId: SessionId }
   'subagent-unauthorized': { childSessionId: SessionId }
   'subagent-delivery-unavailable': { childSessionId: SessionId }
+  /** A `newWorktree` prompt could not start the worktree session; nothing reached the model. */
+  'worktree-failed': { cwd: string; worktree?: string }
   'internal': {}
 }
 

@@ -64,7 +64,7 @@ const SID = sid('s1')
 function workspace(id = 'w1'): WorkspaceView {
   return {
     workspaceId: wid(id), path: `/projects/${id}`, title: id, sessionIds: [],
-    createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+    worktreePaths: [], createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
   }
 }
 
@@ -132,6 +132,13 @@ function mount(
   })
   const workspaces = createSnapshotStore<WorkspaceListState>(workspaceState(workspaceRows))
   const session = createSnapshotStore<ConversationSnapshot>(snapshot)
+  const newWorktreeSessions = createSnapshotStore<ReadonlySet<SessionId>>(new Set())
+  const toggleNewWorktree = vi.fn((id: SessionId, enabled: boolean) => {
+    const next = new Set(newWorktreeSessions.getSnapshot())
+    if (enabled) next.add(id)
+    else next.delete(id)
+    newWorktreeSessions.set(next)
+  })
   const useSession = bindSnapshotSelector(session)
   const chat = createChatStore().create()
   chat.actions.setDraft('ordinary draft')
@@ -267,12 +274,15 @@ function mount(
     renderSlot,
     renderSlotChain,
     selectWorkspace: retargetWorkspace,
+    toggleNewWorktree,
+    useNewWorktreeSessions: bindSnapshotSelector(newWorktreeSessions),
     t,
   }
   const view = render(<ConversationRoot {...props} />)
   return {
     view, chat, sink, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open,
     pickerOwner: () => pickerOwner,
+    newWorktreeSessions,
     rerender: () => { view.rerender(<ConversationRoot {...props} />) },
   }
 }
@@ -533,6 +543,23 @@ describe('ConversationRoot resident composer', () => {
     // The agent-preset chip sits in the same row, for the same reason: both
     // choices are only open before the first message.
     expect(b.slotCalls).toContain('conversation.hero.agentPreset')
+  })
+
+  it('hero new-worktree checkbox toggles the session send intent', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
+    const checkbox = b.view.getByRole('checkbox', { name: '新建 worktree' }) as HTMLInputElement
+    expect(checkbox.checked).toBe(false)
+    fireEvent.click(checkbox)
+    expect(b.newWorktreeSessions.getSnapshot().has(SID)).toBe(true)
+    b.rerender()
+    expect((b.view.getByRole('checkbox', { name: '新建 worktree' }) as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(b.view.getByRole('checkbox', { name: '新建 worktree' }))
+    expect(b.newWorktreeSessions.getSnapshot().has(SID)).toBe(false)
+  })
+
+  it('active session renders no new-worktree checkbox (the choice only exists before the first message)', () => {
+    const b = mount(conversationSnapshot())
+    expect(b.view.queryByRole('checkbox')).toBeNull()
   })
 
   it('prompt failure renders the promptError strip (ordinary failure, no transaction UI)', () => {

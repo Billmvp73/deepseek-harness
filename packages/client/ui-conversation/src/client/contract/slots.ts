@@ -476,12 +476,19 @@ export interface ConversationInjected {
    * When a blank session is already current, carry its draft to the target.
    */
   selectWorkspace: (workspaceId: WorkspaceId) => Promise<void>
+  /** Set one session's new-worktree send intent (the hero checkbox write). */
+  toggleNewWorktree: (sessionId: SessionId, enabled: boolean) => void
   /**
    * Framework-bound sources. `composerBlock` is this session's block when a
    * plugin raised one; the reason is the blocker's own localized copy, which
    * the root renders as the inert composer's placeholder.
+   * `newWorktreeSessions` carries the sessions whose hero new-worktree
+   * checkbox is checked.
    */
-  hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  hooks: {
+    composerBlock: ObservableSnapshot<ComposerBlock | undefined>
+    newWorktreeSessions: ObservableSnapshot<ReadonlySet<SessionId>>
+  }
 }
 
 /** Business callbacks injected into the strict Session body seat. */

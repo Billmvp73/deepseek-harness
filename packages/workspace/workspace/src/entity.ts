@@ -99,17 +99,55 @@ export class WorkspaceEntity implements Workspace {
   }
 
   get sessionIds(): readonly SessionId[] {
-    return this.record.sessionIds.filter(id => this.host.sessionPath(id) === this.record.path)
+    return this.record.sessionIds.filter(id => this.accountsPath(this.host.sessionPath(id)))
+  }
+
+  get worktreePaths(): readonly string[] {
+    return this.record.worktreePaths
+  }
+
+  /** Whether one canonical session cwd falls inside this workspace's membership paths. */
+  private accountsPath(path: string | undefined): boolean {
+    return path === this.record.path || this.record.worktreePaths.includes(path as string)
+  }
+
+  /** Membership predicate over a specific record snapshot (used inside `mutate`'s prune). */
+  private sessionPathAccountsIn(record: WorkspaceRecord, sessionId: SessionId): boolean {
+    const path = this.host.sessionPath(sessionId)
+    return path === record.path || record.worktreePaths.includes(path as string)
   }
 
   async setTitle(title: string): Promise<void> {
     await this.mutate(record => ({ ...record, title }))
   }
 
+  async addWorktree(path: string): Promise<void> {
+    let canonical: string
+    try {
+      canonical = await realpathNormalize(path)
+    } catch (error) {
+      throw new Error(
+        `cannot link worktree '${path}' to workspace '${this.record.path}': `
+        + 'it does not resolve to an existing directory',
+        { cause: error },
+      )
+    }
+    if (!(await stat(canonical)).isDirectory()) {
+      throw new Error(
+        `cannot link worktree '${path}' to workspace '${this.record.path}': `
+        + 'it is not a directory',
+      )
+    }
+    await this.mutate((record) => {
+      if (record.worktreePaths.includes(canonical)) return record
+      return { ...record, worktreePaths: [...record.worktreePaths, canonical] }
+    })
+  }
+
   async attachSession(sessionId: SessionId): Promise<void> {
     // Validation is skipped when the settled snapshot already accounts the
     // id: the cwd fact was checked when it first attached and both inputs
-    // (stored header cwd, workspace path) are immutable. Membership itself is
+    // (stored header cwd, workspace paths) are immutable. Membership itself is
     // decided on the write chain inside `mutate`, never on this snapshot.
     if (!this.record.sessionIds.includes(sessionId)) {
       const header = await this.host.readSessionHeader(sessionId)
@@ -135,7 +173,7 @@ export class WorkspaceEntity implements Workspace {
           + `its cwd '${header.cwd}' is not a directory`,
         )
       }
-      if (cwd !== this.record.path) {
+      if (!this.accountsPath(cwd)) {
         throw new Error(
           `cannot attach session '${sessionId}' to workspace '${this.record.path}': `
           + `its cwd resolves to '${cwd}'`,
@@ -205,7 +243,7 @@ export class WorkspaceEntity implements Workspace {
       next = await this.host.table().update(this.id, (current) => {
         const changed = fn(current)
         const sessionIds = changed.sessionIds.filter(
-          id => this.host.sessionPath(id) === changed.path,
+          id => this.sessionPathAccountsIn(changed, id),
         )
         if (changed === current && sessionIds.length === current.sessionIds.length) {
           throw unchangedSentinel

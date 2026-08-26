@@ -291,16 +291,20 @@ export const sessionPromptRequestSchema = z.object({
   mode: z.union([z.literal('queue'), z.literal('steer')]),
   content: z.array(promptContentPartSchema),
   clientTimeZone: z.string().optional(),
+  newWorktree: z.boolean().optional(),
 }) as unknown as z.ZodType<RequestPayload<'session.prompt'>>
 
-/** session.prompt response value (the command slot appears only when the prompt dispatched a slash command). */
+/** session.prompt response value: the command slot appears only when the prompt dispatched a slash
+ * command; sessionId appears only when the prompt started a new worktree session. */
 export const sessionPromptValueSchema = z.object({
   accepted: z.literal(true),
   command: z.object({
     kind: z.literal('success'),
     text: z.string().optional(),
   }).optional(),
+  sessionId: sessionIdSchema.optional(),
 }) satisfies z.ZodType<Wire<ResponseValue<'session.prompt'>>>
+
 
 /** Opaque attachment id after string-shape validation. */
 export const attachmentIdSchema = z.string().min(1) as unknown as z.ZodType<AttachmentIdType>

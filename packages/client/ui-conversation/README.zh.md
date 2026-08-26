@@ -10,6 +10,8 @@
 
 别的插件可以经 `ctx.conversation.blocks` 让某个会话的编辑器变为惰性：它设置一个携带自己本地化理由的 block，输入栏就渲染同一个禁用的 textarea，并把该理由作为 placeholder——复用无 Workspace 时的那套姿态。推送方向是约束而非偏好：知道某会话发不出消息的插件（ui-model-selection，在没有适配器服务其路由时）本就依赖本包，因此本包读不到它们。模型 seat 是 block 唯一保留可用的控件——这份约定里的每个 block 都靠选模型来解除，把它一起锁上会让编辑器索要它自己拦下的那件事。block 只是提示性设计；无论客户端禁用了什么，宿主都会拒绝一个它无法路由的提示词。两者同时成立时以无 Workspace 姿态为准，因为选 Workspace 是更靠前的前提。
 
+空白会话的 Hero 行在 Workspace chip 与预设 chip 之间有一个"新建 worktree"复选框。勾选后，该会话的首次发送会在 `session.prompt` 上附加请求本地的 `newWorktree` 来源信息：Host 在会话所在仓库创建一个全新的 git worktree，把它注册为源工作区的 linked worktree，并在那里以一个新会话开始工作；客户端跟随响应中的 `sessionId`（运行时会合入列表行并转移选中项），会话仍留在原始工作区分组。活跃会话的页头会在预设标签旁显示一个小 worktree 分支 chip（一个 `conversation.session.header.actions` 条目，纯展示地从会话 `cwd` 派生分支）。cwd 不在 git 仓库内时宿主忽略该标记，因此复选框可以一直开着；仓库判定与迁移都以宿主为权威。该意图是 ConversationController 上的按会话状态（inject hooks 舱携带可观察集合），不是持久化设置。
+
 视图环是一个 slot：严格会话主体注册在 `children` 表中声明会话作用域的 `'conversation.view'` 列表，并通过自身的 renderSlot share 渲染活跃配置项（`only: <active id>`）；视图标签页则从注册选项（`id`／`order`／`label`）投影而来。聊天视图是该包自身的配置项；ui-trajectory 等插件通过 `ctx.slots.register` 贡献标签页，每个视图负责自己的 chrome。
 
 Chat 业务行是彼此独立的注册表贡献，不是封闭的内建联合。Client 插件通过 declaration merging 增加类型化 `ChatNodeDataMap` key，在 `ctx.conversationEvents` 上注册 `ConversationNodeDefinition`，再向 `conversation.chat.node` 注册匹配的 keyed renderer；它无须修改会话 fold 或中央 renderer switch。稳定事件 id、append/prepend 回放、Location data 与 renderer 约束见 [Conversation Node 实操手册](../../../docs/cookbook/adding-a-conversation-node.zh.md)。

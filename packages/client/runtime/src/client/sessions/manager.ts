@@ -317,6 +317,13 @@ export class SessionManager {
       onEngaged: (engaged) => {
         this.recordMutation({ kind: 'engaged', sessionId: engaged.sessionId })
       },
+      // A newWorktree prompt started a NEW session: merge its row (the
+      // session-added frame races this local insert; the fill-only merge
+      // reconciles either order) and move the selection to it.
+      onMoved: (movedTo) => {
+        this.mergeSummary({ sessionId: movedTo, updatedAt: Date.now(), running: false, blank: false })
+        this.select(movedTo)
+      },
       projections: this.projectionStore(sessionId),
       ...this.conversation === undefined ? {} : { conversation: this.conversation },
     })

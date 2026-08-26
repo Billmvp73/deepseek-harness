@@ -34,6 +34,7 @@ import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
+import { WorktreeLabel } from './skeleton/WorktreeLabel.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
 import { registerConversationNodes } from './conversation-nodes/register.ts'
@@ -211,7 +212,11 @@ export function apply(ctx: Context): void {
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
-      hooks: { composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId) },
+      hooks: {
+        composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
+        newWorktreeSessions: concreteConversation(ctx).newWorktreeSessions,
+      },
+      toggleNewWorktree: (id, enabled) => { concreteConversation(ctx).setNewWorktree(id, enabled) },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaces.connectWorkspace(workspaceId)
         if (sessionId !== undefined && nextId !== sessionId) {
@@ -269,6 +274,16 @@ export function apply(ctx: Context): void {
       open: (id) => { sessions.open(id) },
     }),
   }, ConversationSessionHeader)
+
+  // The worktree branch this session works in, beside the agent-preset label
+  // (order -9 = the leading static-context band, right after the -10 preset
+  // label; a non-worktree session renders nothing).
+  slots.register({
+    name: 'conversation.session.header.actions',
+    id: 'worktree-label',
+    order: -9,
+    locale: NS,
+  }, WorktreeLabel)
 
   // The default composer body: its own single slot inside the composer
   // chain's fallback. Public machine surface arrives via the
