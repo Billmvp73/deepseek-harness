@@ -23,6 +23,8 @@ export interface WorkspaceView {
   readonly title: string
   /** Sessions accounted to this Workspace in manual order. */
   readonly sessionIds: readonly SessionId[]
+  /** Canonical directories of linked git worktrees this Workspace accounts, in registration order. */
+  readonly worktreePaths: readonly string[]
   /** ISO-8601 creation instant. */
   readonly createdAt: string
   /** ISO-8601 last-mutation instant. */
@@ -85,6 +87,13 @@ export interface WorkspaceCreateValue {
 export interface WorkspaceRenameRequest {
   readonly workspaceId: WorkspaceId
   readonly title: string
+}
+
+/** Workspace linked-worktree registration. */
+export interface WorkspaceAddWorktreeRequest {
+  readonly workspaceId: WorkspaceId
+  /** Canonical directory to link; typically a git worktree of this Workspace's repository. */
+  readonly path: string
 }
 
 /** Workspace mutation returning the complete changed row. */
