@@ -69,16 +69,6 @@ export async function createGitWorktree(cwd: string, now: Date = new Date()): Pr
 }
 
 /**
- * Remove a created linked worktree and its branch after failed admission.
- * @param worktree - worktree returned by {@link createGitWorktree}.
- * @returns resolution after both git mutations complete.
- */
-export async function removeGitWorktree(worktree: CreatedWorktree): Promise<void> {
-  await git(['worktree', 'remove', '--force', worktree.path], worktree.repoPath)
-  await git(['branch', '-D', worktree.branch], worktree.repoPath)
-}
-
-/**
  * Best-effort rollback of a failed relocation: force-remove the created
  * worktree directory and delete its branch, so an aborted prompt does not
  * leave orphaned git state (a directory plus a branch pointing at HEAD)

@@ -28,6 +28,7 @@ function workspace(
     path: `/w/${id}`,
     title: id,
     sessionIds,
+    worktreePaths: [],
     createdAt,
     updatedAt: createdAt,
   }

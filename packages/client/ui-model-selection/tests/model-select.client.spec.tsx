@@ -246,10 +246,10 @@ describe('ModelSelect reasoning effort', () => {
     // Model id and description both match.
     fireEvent.change(search, { target: { value: 'claude' } })
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
-      .toEqual(['Claude 3.5 SonnetAnthropic'])
+      .toEqual(['Claude 3.5 Sonnet'])
     fireEvent.change(search, { target: { value: 'anthropic' } })
     expect(screen.getAllByRole('menuitemradio').map(item => item.textContent))
-      .toEqual(['Claude 3.5 SonnetAnthropic'])
+      .toEqual(['Claude 3.5 Sonnet'])
 
     // A provider name match keeps every model in that group.
     fireEvent.change(search, { target: { value: 'openrouter' } })

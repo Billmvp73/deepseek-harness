@@ -285,6 +285,7 @@ interface WorkspaceView {
   readonly path: string
   readonly title: string
   readonly sessionIds: readonly SessionId[]
+  readonly worktreePaths: readonly string[]
   readonly createdAt: string
   readonly updatedAt: string
 }
