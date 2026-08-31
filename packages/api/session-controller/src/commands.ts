@@ -393,20 +393,20 @@ export class SessionCommandController {
       created = worktree
       worktreePath = worktree.path
     } catch (error: unknown) {
-      reject(
-        'worktree-failed',
+      throw new RemoteError(
+        'session/worktree-failed',
         `failed to create a new git worktree for session "${agent.session.id}" in "${cwd}": ${String(error)}`,
         { cwd },
       )
     }
-    const newSessionId = SessionId(`session-${randomUUID()}`)
+    const newSessionId = brandString<SessionId>(`session-${randomUUID()}`)
     let moved: Agent
     try {
       moved = await this.agents.ensureSession(newSessionId, worktreePath, false, this.agents.presetForSession(agent.session))
     } catch (error: unknown) {
       await rollback()
-      reject(
-        'worktree-failed',
+      throw new RemoteError(
+        'session/worktree-failed',
         `worktree "${worktreePath}" was created for session "${agent.session.id}" but the session could not start there: ${String(error)}`,
         { cwd, worktree: worktreePath },
       )
@@ -420,8 +420,8 @@ export class SessionCommandController {
         await workspace.attachSession(newSessionId)
       } catch (error: unknown) {
         await rollback()
-        reject(
-          'workspace-attach-failed',
+        throw new RemoteError(
+          'session/workspace-attach-failed',
           `session "${newSessionId}" was created in worktree "${worktreePath}" but could not attach to workspace "${workspace.id}": ${String(error)}`,
           { sessionId: newSessionId, workspaceId: workspace.id },
         )

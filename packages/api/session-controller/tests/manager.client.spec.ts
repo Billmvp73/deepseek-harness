@@ -270,14 +270,14 @@ describe('newWorktree moved prompts', () => {
   it('merges the worktree session row and moves the selection when a prompt is relocated', async () => {
     const api = new FakeApiClient()
     api.onList = () => Promise.resolve(ok({ items: [summary(S1, { blank: true })] as never[] }))
-    const manager = new SessionManager(api, fakeRemote())
+    const manager = new SessionManager(fakeRemote(api))
     await manager.refreshList()
     manager.select(S1)
     const movedTo = 'fk-wt' as SessionId
     api.onPrompt = () => Promise.resolve(ok({ accepted: true as const, sessionId: movedTo }))
     const source = manager.get(S1)
     source.handleBlank(true)
-    const result = await source.prompt([{ type: 'text', text: '开工' }], 'queue', undefined, { newWorktree: true })
+    const result = await source.prompt([{ type: 'text', text: '开工' }], 'queue', undefined, undefined, { newWorktree: true })
     expect(result.ok).toBe(true)
     // The new row is synchronously addressable (the host frame races this
     // local insert) and the selection moved off the still-blank source.

@@ -330,7 +330,7 @@ export class SessionManager {
       // A newWorktree prompt started a NEW session: merge its row (the
       // session-added frame races this local insert; the fill-only merge
       // reconciles either order) and move the selection to it.
-      onMoved: (movedTo) => {
+      onMoved: (_session, movedTo) => {
         this.mergeSummary({ sessionId: movedTo, updatedAt: Date.now(), running: false, blank: false })
         this.select(movedTo)
       },
