@@ -4792,7 +4792,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionErrorDetailsMap',
-    declaration: 'export interface SessionErrorDetailsMap {\n    \'bad-request\': Record<never, never>;\n    cancelled: Record<never, never>;\n    \'session-not-found\': {\n        readonly sessionId: SessionId;\n    };\n    \'model-unavailable\': {\n        readonly provider: string;\n        readonly model: string;\n    };\n    \'session-conflict\': {\n        readonly sessionId: SessionId;\n        readonly requestedCwd: string;\n        readonly existingCwd?: string;\n    };\n    \'invalid-time-zone\': {\n        readonly value: string;\n    };\n    \'workspace-attach-failed\': {\n        readonly sessionId: SessionId;\n        readonly workspaceId: string;\n    };\n    \'workspace-not-found\': {\n        readonly workspaceId: string;\n    };\n    \'agent-preset-conflict\': {\n        readonly sessionId: SessionId;\n        readonly requestedPreset: string;\n        readonly existingPreset?: string;\n    };\n    \'agent-preset-not-found\': {\n        readonly agentPreset: string;\n        readonly available: readonly string[];\n    };\n    \'agent-preset-invalid\': {\n        readonly agentPreset: string;\n        readonly reason: string;\n    };\n    \'agent-busy\': {\n        readonly reason: string;\n    };\n    \'attachment-error\': {\n        readonly reason: string;\n    };\n    \'queue-item-not-found\': {\n        readonly itemId: MessageId;\n    };\n    \'steer-unavailable\': {\n        readonly itemId: MessageId;\n    };\n    \'title-invalid\': {\n        readonly sessionId: SessionId;\n    };\n    \'fork-unavailable\': {\n        readonly sessionId: SessionId;\n    /* …truncated — full shape in source */',
+    declaration: 'export interface SessionErrorDetailsMap {\n    \'bad-request\': Record<never, never>;\n    cancelled: Record<never, never>;\n    \'session-not-found\': {\n        readonly sessionId: SessionId;\n    };\n    \'model-unavailable\': {\n        readonly provider: string;\n        readonly model: string;\n    };\n    \'session-conflict\': {\n        readonly sessionId: SessionId;\n        readonly requestedCwd: string;\n        readonly existingCwd?: string;\n    };\n    \'invalid-time-zone\': {\n        readonly value: string;\n    };\n    \'workspace-attach-failed\': {\n        readonly sessionId: SessionId;\n        readonly workspaceId: string;\n    };\n    \'worktree-failed\': {\n        readonly cwd: string;\n        readonly worktree?: string;\n    };\n    \'workspace-not-found\': {\n        readonly workspaceId: string;\n    };\n    \'agent-preset-conflict\': {\n        readonly sessionId: SessionId;\n        readonly requestedPreset: string;\n        readonly existingPreset?: string;\n    };\n    \'agent-preset-not-found\': {\n        readonly agentPreset: string;\n        readonly available: readonly string[];\n    };\n    \'agent-preset-invalid\': {\n        readonly agentPreset: string;\n        readonly reason: string;\n    };\n    \'agent-busy\': {\n        readonly reason: string;\n    };\n    \'attachment-error\': {\n        readonly reason: string;\n    };\n    \'queue-item-not-found\': {\n        readonly itemId: MessageId;\n    };\n    \'steer-unavailable\': {\n        readonly itemId: MessageId;\n    };\n    \'title-invalid\': {\n        readonly /* …truncated — full shape in source */',
   },
   {
     name: 'SessionEvent',
@@ -4996,11 +4996,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionPromptRequest',
-    declaration: 'export interface SessionPromptRequest {\n    readonly requestId: SessionRequestId;\n    readonly sessionId: SessionId;\n    readonly mode: \'queue\' | \'steer\';\n    readonly content: readonly PromptContentPart[];\n    readonly clientTimeZone?: string;\n}',
+    declaration: 'export interface SessionPromptRequest {\n    readonly requestId: SessionRequestId;\n    readonly sessionId: SessionId;\n    readonly mode: \'queue\' | \'steer\';\n    readonly content: readonly PromptContentPart[];\n    readonly clientTimeZone?: string;\n    readonly newWorktree?: boolean;\n}',
   },
   {
     name: 'SessionPromptValue',
-    declaration: 'export interface SessionPromptValue {\n    readonly accepted: true;\n}',
+    declaration: 'export interface SessionPromptValue {\n    readonly accepted: true;\n    readonly sessionId?: SessionId;\n}',
   },
   {
     name: 'SessionQueuedItem',
@@ -6048,7 +6048,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'Workspace',
-    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
+    declaration: 'export interface Workspace {\n    readonly id: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly createdAt: string;\n    readonly updatedAt: string;\n    readonly worktreePaths: readonly string[];\n    readonly sessionIds: readonly SessionId[];\n    setTitle(title: string): Promise<void>;\n    attachSession(sessionId: SessionId): Promise<void>;\n    addWorktree(path: string): Promise<void>;\n    insertSessionBefore(sessionId: SessionId, beforeSessionId?: SessionId): Promise<void>;\n    detachSession(sessionId: SessionId): Promise<void>;\n    status(): Promise<\'ok\' | \'missing-dir\'>;\n}',
   },
   {
     name: 'WorkspaceArchiveSessionRequest',
@@ -6108,7 +6108,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'WorkspaceView',
-    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
+    declaration: 'export interface WorkspaceView {\n    readonly workspaceId: WorkspaceId;\n    readonly path: string;\n    readonly title: string;\n    readonly sessionIds: readonly SessionId[];\n    readonly worktreePaths: readonly string[];\n    readonly createdAt: string;\n    readonly updatedAt: string;\n}',
   },
 ]
 
