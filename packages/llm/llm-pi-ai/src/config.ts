@@ -28,6 +28,7 @@ import {
   MODALITIES,
   resolveRouteModels,
   SUPPORTED_THINKING_FORMATS,
+  THINKING_BUDGET_FIELDS,
   THINKING_LEVELS,
 } from './catalog.ts'
 import type {
@@ -261,6 +262,7 @@ const compatProfile: z<PiAiCompatProfile> = z.object({
   chatTemplateKwargs: z.dict(chatTemplateKwarg),
   chatTemplateArgs: z.dict(chatTemplateKwarg),
   supportsThinkingTokenBudget: z.boolean(),
+  thinkingTokenBudgetField: z.union(THINKING_BUDGET_FIELDS),
   supportsStrictMode: z.boolean(),
   cacheControlFormat: z.union(CACHE_CONTROL_FORMATS),
   supportsLongCacheRetention: z.boolean(),
