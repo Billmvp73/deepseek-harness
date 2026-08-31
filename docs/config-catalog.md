@@ -1258,6 +1258,13 @@ export interface PiAiCompatProfile {
   /** Whether the endpoint accepts `thinking_token_budget` to cap vLLM reasoning; `openai-completions`. */
   supportsThinkingTokenBudget?: boolean
   /**
+   * The top-level request field used to cap reasoning tokens, for a token-based
+   * provider that does not read `thinking_token_budget`; `openai-completions`.
+   * `supportsThinkingTokenBudget` aliases the vLLM spelling; this names the
+   * exact field the endpoint reads.
+   */
+  thinkingTokenBudgetField?: NonNullable<OpenAICompletionsCompat['thinkingTokenBudgetField']>
+  /**
    * Whether the endpoint accepts `strict` in tool definitions;
    * `openai-completions`, the three Responses protocols, `bedrock-converse-stream`.
    */
