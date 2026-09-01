@@ -23,6 +23,11 @@
     mode: danger-full-access
     workspaceRoot: !!js process.cwd()
 
+# This scenario owns persistent pwsh execution, not permission selection.
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  disabled: true
+
 - id: subprocess
   name: '@deepseek-ai/dsh-subprocess-local'
 

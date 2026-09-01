@@ -24,6 +24,11 @@
   name: '@deepseek-ai/dsh-pwsh-sandbox'
   disabled: false
 
+# This scenario owns pwsh execution, not host-dependent permission defaults.
+- id: permission
+  name: '@deepseek-ai/dsh-permission-presets'
+  disabled: true
+
 - id: shell-env
   name: '@deepseek-ai/dsh-shell-env'
 
