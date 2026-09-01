@@ -14,7 +14,7 @@ Status: implemented
 
 [ci.yml](../../../../.github/workflows/ci.yml) 中必需的 `windows` 作业仍是在 `ubuntu-latest` 上运行的 `windows node 24 / wine blocking`。它保留经过校验和验证的 Windows Node、Wine apt 与 pnpm 缓存、仅限工作区快照的 hoisted 安装，以及运行工作区构建与生产网站的[共享 Wine 门禁脚本](../../../../scripts/wine-windows-gates.sh)。Node 分发文件传输采用有界重试；nodejs.org 的大文件传输停滞时，由支持范围请求的传输镜像续传相同字节，但版本和 SHA-256 权威仍属于 nodejs.org，归档通过该校验前绝不会投入使用。稳定的 `windows` 作业 ID 仍是 `all checks passed` 的依赖项。[已归档的 Wine 实验](../../archived/process/2026-07-27-wine-windows-gates-experiment.md)保留其实测取舍，而本文负责当前双通道拓扑。
 
-每个拉取请求还会在组织自有的 `dsh-windows-2025-16core` 运行器上启动 4 个相互独立的原生作业：`windows-build`、`windows-coverage`、`windows-native-tests` 与 `windows-observational`。每个作业都会为工作区符号链接启用开发人员模式，通过 `pnpm/action-setup` 提供仓库固定版本的 pnpm，在不传输 store 归档的情况下执行不可变安装，并在原生 PowerShell 下运行自己的清单。Windows 故障切换变量会把这 4 个作业全部重定向到公司内部运行器池。各作业采用 60 至 120 分钟的截止时间，以约束卡住的工作，同时不把性能目标当作正确性截止时间。
+每个拉取请求还会启动 4 个相互独立的原生作业：`windows-build`、`windows-coverage`、`windows-native-tests` 与 `windows-observational`。上游仓库使用组织自有的 `dsh-windows-2025-16core` 运行器或公司内部故障切换池；fork 使用标准 `windows-latest`，因为组织自有标签不会跨仓库所有权生效。每个作业都会为工作区符号链接启用开发人员模式，通过 `pnpm/action-setup` 提供仓库固定版本的 pnpm，在不传输 store 归档的情况下执行不可变安装，并在原生 PowerShell 下运行自己的清单。fork 针对标准运行器容量降低工作线程数。各作业采用 60 至 120 分钟的截止时间，以约束卡住的工作，同时不把性能目标当作正确性截止时间。
 
 `windows-build` 与 `windows-native-tests` 是 `all checks passed` 的依赖项；其工作区构建和定向原生进程结果具有阻断性。`windows-coverage` 仍是常规作业，但不在聚合流程的 `needs` 中，因此逐文件 100% 覆盖率结果会保持红灯并可见，却不会延迟必需判定。`windows-observational` 同样不在聚合流程的 `needs` 中，并使用 `continue-on-error`，因为静态检查、文档、包与构建产物的阻断性判定由 Linux 负责。
 
@@ -44,7 +44,7 @@ Shiki 会禁用 TextMate 正则的延迟编译，并在用户内容进入保持�
 
 **排除看似不受支持的文件或削弱 Windows fixture。** 不予采纳，因为受影响的 LSP、watcher、持久化、客户端与进程行为均受支持。仅适用于另一平台的分支采用窄范围标注；可移植结果继续计入分母，并通过符合真实宿主行为的 fixture 验证。
 
-**保留 GitHub 标准的 `windows-2025` 运行器。** 该可移植双核镜像能可靠完成这份完整清单，但其 32 分钟的串行结果使自动原生信号的实用性远低于所选的 16 核运行器。
+**让上游原生作业保留在 GitHub 标准 Windows 运行器上。** 该可移植镜像能可靠完成这份完整清单，但其 32 分钟的串行结果使上游自动原生信号的实用性远低于所选的 16 核运行器。fork 接受这项较慢容量，因为所选企业标签在那里不可用。
 
 **使用 32 核或更大的运行器。** 32 核对比仅比 16 核将聚合门禁时间缩短 1.47 秒，且仍因 Node 的 CJS lexer 失败；先前高并发的 32 核和 64 核试验也以同类故障失败。因此，增加容量只会提高资源分配成本，却不能带来稳定的端到端收益。
 
@@ -54,4 +54,4 @@ Wine 保留必需聚合流程现有的关键路径和作业身份。`all checks 
 
 尽管如此，每个拉取请求都会获得真实 NT 内核、NTFS、PowerShell、Windows 进程、原生插件和受支持源码覆盖率信号。原生作业会重复设置流程，并在构建、覆盖率与观测性工作区中重复构建，但它们会降低每个作业的进程数，并暴露兼容性通道掩盖的路径、watcher、生命周期与 fixture 缺陷。
 
-维护者必须保留两种有意设计的执行拓扑：Wine 快照使用 Linux 安装加 hoisted 布局来触达 win32 二进制文件，而原生作业在组织自有的 16 核 Windows 运行器上使用相互独立的不可变工作区。任一拓扑独有的失败都必须依据该边界分类，不得削弱或静默跳过。
+维护者必须保留两种有意设计的执行拓扑：Wine 快照使用 Linux 安装加 hoisted 布局来触达 win32 二进制文件，而原生作业使用相互独立的不可变 Windows 工作区。上游使用组织自有的 16 核运行器，fork 使用标准托管容量。任一拓扑或容量类别独有的失败都必须依据该执行环境分类，不得削弱或静默跳过。

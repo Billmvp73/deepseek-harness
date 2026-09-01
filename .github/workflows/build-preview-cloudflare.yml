@@ -32,6 +32,9 @@ env:
 
 jobs:
   preview:
+    # The deployment target, credentials, and enterprise runner belong to the
+    # upstream repository; forks do not publish upstream preview aliases.
+    if: github.repository == 'deepseek-ai/deepseek-harness'
     runs-on: dsh-ubuntu-24-04-16core
     name: cloudflare pages preview
     steps:
