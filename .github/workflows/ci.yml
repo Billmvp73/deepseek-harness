@@ -104,8 +104,8 @@ jobs:
     env:
       # Standard fork runners need smaller worker pools than the upstream
       # enterprise and failover runners.
-      DSH_COVERAGE_MAX_WORKERS: ${{ github.repository != 'deepseek-ai/deepseek-harness' && '2' || '6' }}
-      DSH_COVERAGE_PARTITIONS: ${{ github.repository != 'deepseek-ai/deepseek-harness' && '1' || '4' }}
+      DSH_COVERAGE_MAX_WORKERS: ${{ github.repository != 'deepseek-ai/deepseek-harness' && '1' || '6' }}
+      DSH_COVERAGE_PARTITIONS: ${{ github.repository != 'deepseek-ai/deepseek-harness' && '2' || '4' }}
       DSH_GATE_CONCURRENCY: ${{ github.repository != 'deepseek-ai/deepseek-harness' && '1' || '3' }}
     steps:
       - uses: actions/checkout@v6
@@ -457,7 +457,7 @@ jobs:
     name: windows node 24 / coverage
     timeout-minutes: 120
     env:
-      DSH_COVERAGE_MAX_WORKERS: ${{ github.repository != 'deepseek-ai/deepseek-harness' && '2' || '6' }}
+      DSH_COVERAGE_MAX_WORKERS: ${{ github.repository != 'deepseek-ai/deepseek-harness' && '1' || '6' }}
       DSH_COVERAGE_PARTITIONS: '4'
       DSH_COVERAGE_TEST_TIMEOUT_MS: '90000'
       DSH_GATE_CONCURRENCY: ${{ github.repository != 'deepseek-ai/deepseek-harness' && '2' || '3' }}
