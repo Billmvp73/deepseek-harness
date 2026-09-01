@@ -103,6 +103,8 @@ describe('CI workflow', () => {
       expect(typeof job['runs-on']).toBe('string')
       expect(job['runs-on'], `${jobName} runs-on must use the Windows failover switch`).toContain('DSH_CI_FAILOVER_WINDOWS')
       expect(job['runs-on'], `${jobName} runs-on must not use the Linux failover switch`).not.toContain('DSH_CI_FAILOVER_LINUX')
+      expect(job['runs-on']).toContain("github.repository != 'deepseek-ai/deepseek-harness'")
+      expect(job['runs-on']).toContain('windows-latest')
       expect(job['runs-on']).toContain('self-hosted')
       expect(job['runs-on']).toContain('dsh-win-ci')
       expect(job['runs-on']).toContain('dsh-windows-2025-16core')
@@ -168,11 +170,21 @@ describe('CI workflow', () => {
       expect(typeof job['runs-on']).toBe('string')
       expect(job['runs-on'], `${jobName} runs-on must use the Linux failover switch`).toContain('DSH_CI_FAILOVER_LINUX')
       expect(job['runs-on'], `${jobName} runs-on must not use the Windows failover switch`).not.toContain('DSH_CI_FAILOVER_WINDOWS')
+      expect(job['runs-on']).toContain("github.repository != 'deepseek-ai/deepseek-harness'")
+      expect(job['runs-on']).toContain('ubuntu-latest')
       expect(job['runs-on']).toContain('vm-backup')
     }
     expect(aggregate['runs-on']).toContain('DSH_CI_FAILOVER_LINUX')
     expect(aggregate['runs-on']).not.toContain('DSH_CI_FAILOVER_WINDOWS')
     expect(aggregate['runs-on']).toContain('vm-backup')
+  })
+
+  it('publishes Cloudflare previews only from the upstream repository', () => {
+    const workflow = loadWorkflow('.github/workflows/build-preview-cloudflare.yml')
+    const preview = workflowJob(workflow, 'preview')
+
+    expect(preview.if).toBe("github.repository == 'deepseek-ai/deepseek-harness'")
+    expect(preview['runs-on']).toBe('dsh-ubuntu-24-04-16core')
   })
 
   it('gives the Wine Host TypeScript compile the repository heap budget', () => {
