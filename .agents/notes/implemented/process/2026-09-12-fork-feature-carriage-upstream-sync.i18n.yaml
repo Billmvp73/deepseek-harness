@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-09-12-fork-feature-carriage-upstream-sync.md
-2026-09-12-fork-feature-carriage-upstream-sync.md: ec275723c5a03d25048bdff2514b8a5ecebc6564
-2026-09-12-fork-feature-carriage-upstream-sync.zh.md: 3b0a68a46abb3441334aff6975decccff594c469
+2026-09-12-fork-feature-carriage-upstream-sync.md: 2a222a409ddaf67e918d50548d4e876acac07198
+2026-09-12-fork-feature-carriage-upstream-sync.zh.md: e96df6a37cb3851381c8e567a65384fc4b6417a5

@@ -36,7 +36,7 @@ Status: implemented
 
 ## Testing
 
-`typecheck`、`lint` 与 `test:docs`（16/16）通过。四个特性由 [`api-proxy-worktree.spec.ts`](../../../../packages/api/session-controller/tests/api-proxy-worktree.spec.ts)、[`model-select.client.spec.tsx`](../../../../packages/client/ui-model-selection/tests/model-select.client.spec.tsx) 与 [`service-orchestration.client.spec.ts`](../../../../packages/client/ui-conversation/tests/service-orchestration.client.spec.ts) 钉住，后者的 `prompt()` 期望携带新增的 `opts` 实参。`verify-archived-agent-notes` 报告六类共 1884 个冻结产物，`verify-translation-pairing` 重新记录合并触及的双语配对。
+`typecheck`、`lint` 与 `test:docs`（16/16）通过。[`elevation-styles.client.spec.ts`](../../../../packages/client/ui-theme/tests/elevation-styles.client.spec.ts) 中的细线门禁抓到了合并引入的唯一真实缺陷：模型选择搜索框以 `1px` 绘制中性色边框，而上游现在要求 `0.5px`。四个特性由 [`api-proxy-worktree.spec.ts`](../../../../packages/api/session-controller/tests/api-proxy-worktree.spec.ts)、[`model-select.client.spec.tsx`](../../../../packages/client/ui-model-selection/tests/model-select.client.spec.tsx) 与 [`service-orchestration.client.spec.ts`](../../../../packages/client/ui-conversation/tests/service-orchestration.client.spec.ts) 钉住，后者的 `prompt()` 期望携带新增的 `opts` 实参。`verify-archived-agent-notes` 报告六类共 1884 个冻结产物，`verify-translation-pairing` 重新记录合并触及的双语配对。
 
 ## Consequences
 
@@ -44,4 +44,4 @@ Status: implemented
 
 ## Deferred
 
-两个全量测试失败与环境相关而非合并所致，暂不修复：[`real-product.spec.ts`](../../../../packages/subagent/subagent-claude-code/tests/real-product.spec.ts) 需要真实的 Claude Agent SDK，缺少时超时；[`spawn-runner.spec.ts`](../../../../packages/subprocess/subprocess-local/tests/spawn-runner.spec.ts) 断言的 Windows PATH 探测顺序在这台 Linux 宿主上无法复现。
+六个全量测试文件在这台宿主上失败，无一由合并所致：合并改动的每个文件都不在它们的导入闭包内，因此它们的输入与上游 `c291e7961a` 逐字节一致。[`real-product.spec.ts`](../../../../packages/subagent/subagent-claude-code/tests/real-product.spec.ts) 需要真实的 Claude Agent SDK，缺少时超时。[`spawn-runner.spec.ts`](../../../../packages/subprocess/subprocess-local/tests/spawn-runner.spec.ts) 断言的 Windows PATH 探测顺序在这台 Linux 宿主上无法复现。[`subagent-acp.spec.ts`](../../../../packages/subagent/subagent-acp/tests/subagent-acp.spec.ts) 的收尾阶梯失败，因为这台宿主的 systemd 以 `Invalid argument` 拒绝向 scope 的辅助进程发送 `SIGKILL`。[`runtime.spec.ts`](../../../../packages/experimental/code-runtime-python/tests/runtime.spec.ts) 只在全量负载下触到 60 秒墙钟上限，单独运行通过。[`spill-local.spec.ts`](../../../../packages/spill/spill-local/tests/spill-local.spec.ts) 与 [`loader-composition.spec.ts`](../../../../packages/spill/spill-local/tests/loader-composition.spec.ts) 中的九个测试观察到启动清理扫描什么都不删且不报警告；原因未查明，且归属于该包而非本次同步。
