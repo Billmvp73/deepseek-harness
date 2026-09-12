@@ -51,6 +51,7 @@ export function workspace(id: string, overrides: Partial<WorkspaceView> = {}): W
     path: `/work/${id}`,
     title: id,
     sessionIds: [],
+    worktreePaths: [],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,

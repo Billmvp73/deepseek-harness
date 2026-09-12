@@ -325,7 +325,7 @@ export class SessionCommandController {
       )
     }
     if (created === undefined) return undefined
-    const sessionId = SessionId(`session-${randomUUID()}`)
+    const sessionId = brandString<SessionId>(`session-${randomUUID()}`)
     let moved: Agent
     try {
       moved = await this.agents.ensureSession(
@@ -406,7 +406,7 @@ export class SessionCommandController {
     }
     let movedSessionId: SessionId | undefined
     let rollbackRelocation: (() => Promise<void>) | undefined
-    if (request.newWorktree === true && sessionBlank(agent)) {
+    if (request.newWorktree === true && sessionBlank(this.ctx, agent)) {
       const relocation = await this.relocatePrompt(agent)
       if (relocation !== undefined) {
         agent = relocation.agent
@@ -649,9 +649,16 @@ export class SessionCommandController {
   }
 }
 
-/** Whether an Agent's Session has not started its first turn. */
-function sessionBlank(agent: Agent): boolean {
-  return !agent.session.events.some(event => event.type === 'turn/start')
+/**
+ * Whether an Agent's Session has not started its first turn, read from the
+ * `sessionListMetadata` projection (the same `blank` authority the Session list
+ * publishes) rather than a synchronous scan of event history.
+ * @param ctx - Host context carrying the projection registry.
+ * @param agent - Agent whose Session is inspected.
+ * @returns true while no `turn/start` has been committed.
+ */
+function sessionBlank(ctx: Context, agent: Agent): boolean {
+  return ctx.sessionProjections.stateOf(agent.session, 'sessionListMetadata')?.blank ?? false
 }
 
 function resolvePromptFileReceipts(

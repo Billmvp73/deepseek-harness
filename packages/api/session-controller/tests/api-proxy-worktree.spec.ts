@@ -84,7 +84,7 @@ async function harness(cwd: string, rejectMovedPrompt = false): Promise<Harness>
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(SessionStore)
-  await ctx.plugin(SystemPrompt, { persona: '' })
+  await ctx.plugin(SystemPrompt, { personaPrefix: '' })
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(AgentRegistry)
   ctx.llm.registerAdapter(['deepseek-official'], new SilentAdapter())
@@ -188,7 +188,7 @@ describe('session.prompt newWorktree relocation', () => {
       source: { kind: 'user' },
     })
     expect(followup).not.toHaveBeenCalled()
-    expect(ctx.sessions.get(sessionId)?.events).toHaveLength(0)
+    expect(ctx.sessions.get(sessionId)?.snapshotEvents()).toHaveLength(0)
     expect(workspace.worktreePaths).toEqual([movedCwd])
     expect(workspace.attachSession).toHaveBeenCalledWith(response.value.sessionId)
   }, 20_000)
@@ -225,7 +225,7 @@ describe('session.prompt newWorktree relocation', () => {
 
     const response = await remote.prompt(promptRequest(sessionId, '开工'))
 
-    expect(response).toMatchObject({ ok: false, error: { code: 'worktree-failed' } })
+    expect(response).toMatchObject({ ok: false, error: { code: 'session/worktree-failed' } })
     expect(followup).not.toHaveBeenCalled()
     expect(ctx.sessions.list()).toHaveLength(1)
   })
@@ -236,7 +236,7 @@ describe('session.prompt newWorktree relocation', () => {
 
     const response = await remote.prompt(promptRequest(sessionId, '开工'))
 
-    expect(response).toMatchObject({ ok: false, error: { code: 'agent-busy' } })
+    expect(response).toMatchObject({ ok: false, error: { code: 'session/agent-busy' } })
     expect(followup).not.toHaveBeenCalled()
     expect(movedFollowup).toHaveBeenCalledOnce()
     const moved = relocatedSession(ctx, sessionId)

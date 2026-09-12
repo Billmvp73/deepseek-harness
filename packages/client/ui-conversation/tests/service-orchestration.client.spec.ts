@@ -423,7 +423,7 @@ describe('ConversationController', () => {
     expect(b.prompt).toHaveBeenCalledWith([
       { type: 'file', receiptId: 'send-receipt' },
       { type: 'text', text: 'read' },
-    ], 'queue', undefined, expect.any(String))
+    ], 'queue', undefined, expect.any(String), undefined)
     expect(b.root.resolveDraftAttachments([attachment.id])).toHaveLength(1)
     expect(b.prompt.mock.calls[0]?.[3]).toBe('file-rpc-id')
     retire?.({
