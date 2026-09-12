@@ -239,6 +239,43 @@ describe('HTML bootstrap facade', () => {
   })
 })
 
+describe('Web carrier', () => {
+  it('serves the bundle route when the carrier is already present as the service loads', async () => {
+    const packageName = '@fixture/carrier-present'
+    writeBuiltPackage(packageName, {})
+    const ctx = new Context()
+    ctx.baseUrl = pathToFileURL(root!).href + '/'
+    ctx.provide('loader', {
+      *entries() {
+        yield {
+          options: { name: packageName },
+          fiber: {},
+          disabled: false,
+          parent: { tree: { ctx: { baseUrl: ctx.baseUrl } } },
+        }
+      },
+    })
+    let route: WebRoute | undefined
+    const webServer: Pick<WebServer, 'port' | 'register' | 'tapIndex'> = {
+      port: 0,
+      register: (candidate) => {
+        if (candidate.path === '/plugins') route = candidate
+        return () => {}
+      },
+      tapIndex: () => () => {},
+    }
+    // A profile's carrier is a sibling Loader entry, so it owns the service in
+    // its own fiber: `ctx.get` reads it out of the global store, while the
+    // context proxy — which walks the consumer's ancestors — never sees it and
+    // refuses `ctx.webServer` on a fiber that injects `loader` alone.
+    await ctx.plugin((carrierCtx: Context) => { carrierCtx.provide('webServer', webServer as WebServer) })
+
+    await ctx.plugin(ClientModuleRegistry)
+
+    expect(route?.path).toBe('/plugins')
+  })
+})
+
 describe('client bundle activation', () => {
   it.each(['v1', 'v2'] as const)(
     'resolves %s package metadata from the owning entry tree',
