@@ -656,9 +656,22 @@ export class SessionCommandController {
  * @param ctx - Host context carrying the projection registry.
  * @param agent - Agent whose Session is inspected.
  * @returns true while no `turn/start` has been committed.
+ * @throws {@link RemoteError} `gateway/internal` when the projection is unregistered.
  */
 function sessionBlank(ctx: Context, agent: Agent): boolean {
-  return ctx.sessionProjections.stateOf(agent.session, 'sessionListMetadata')?.blank ?? false
+  const metadata = ctx.sessionProjections.stateOf(agent.session, 'sessionListMetadata')
+  /* v8 ignore start -- ApiSessionList registers the unit in this plugin's own
+     constructor, so an unregistered key means the assembly changed; treating the
+     Session as non-blank instead would silently ignore the worktree request. */
+  if (metadata === undefined) {
+    throw new RemoteError(
+      'gateway/internal',
+      'sessionListMetadata projection is not registered; cannot decide whether the Session is blank',
+      {},
+    )
+  }
+  /* v8 ignore stop */
+  return metadata.blank
 }
 
 function resolvePromptFileReceipts(
