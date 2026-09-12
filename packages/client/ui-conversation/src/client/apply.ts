@@ -1,6 +1,8 @@
 /** Registers the target-neutral Conversation assembly, shell, input, and docks. */
 import type { Context } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
+import { IconPaperclipOutline16 } from '@deepseek-ai/dsh-client-ui-primitives'
 import { createSnapshotStore, type BoundActions } from '@deepseek-ai/dsh-client-store'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
@@ -13,10 +15,10 @@ import { UiConversation } from './conversation/assembly.ts'
 import type { ViewTab } from './contract/views.ts'
 import type {
   ComposerBarInjected, ConversationInjected, ConversationSessionHeaderInjected,
-  ConversationSessionInjected,
+  ConversationSessionInjected, DraftFileUploads,
 } from './contract/slots.ts'
 import type { InputNotice } from './contract/input.ts'
-import { createConversationStore } from './stores.ts'
+import { createConversationStore, readConversationViewPreference } from './stores.ts'
 import { ConversationController, UnsupportedImageMediaTypeError } from './service.ts'
 import type { IConversation } from './service.ts'
 import { ComposerBlockRegistry } from './input/blocks.ts'
@@ -27,10 +29,12 @@ import { queueDockEntry } from './queue/QueueDock.tsx'
 import { EnterBehaviorRow } from './settings/EnterBehaviorRow.tsx'
 import type { EnterBehaviorRowInjected } from './settings/EnterBehaviorRow.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
+import { ConversationPanel } from './skeleton/ConversationPanel.tsx'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { InputBar } from './skeleton/InputBar.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { WorktreeLabel } from './skeleton/WorktreeLabel.tsx'
+import { resolveActiveView } from './view-selection.ts'
 import { en, NS, zh, type ConversationKey } from './locales.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
 
@@ -43,8 +47,19 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 
 /** Services required by the Conversation plugin. */
 export const inject = [
-  'slots', 'sessions', 'uiSession', 'uiWorkspace', 'locale', 'settingsScope',
+  'slots', 'sessions', 'fileUpload', 'uiSession', 'uiWorkspace', 'locale', 'settingsScope',
 ]
+
+/** Conversation runtime configuration. */
+export interface Config {
+  /** Maximum generic-file uploads allowed to run concurrently in browser Workers. */
+  maxConcurrentFileUploads?: number
+}
+
+/** Validated Conversation runtime configuration. */
+export const Config: z<Config> = z.object({
+  maxConcurrentFileUploads: z.natural().min(1).default(2),
+})
 
 // Stable no-session sources keep the renderer's observable-hook cache and
 // hook order unchanged across current-Session transitions.
@@ -65,11 +80,29 @@ const ABSENT_MENU_LAUNCHER = {
   getSnapshot: (): string | null => null,
   subscribe: () => () => {},
 }
+const EMPTY_FILE_UPLOADS: DraftFileUploads = {}
+const ABSENT_FILE_UPLOADS = {
+  getSnapshot: () => EMPTY_FILE_UPLOADS,
+  subscribe: () => () => {},
+}
 
 interface WorkspaceNavigation {
-  connectWorkspace(
+  openSession(sessionId: SessionId): void
+  openWorkspace(
     workspaceId: Parameters<ConversationInjected['selectWorkspace']>[0],
-  ): Promise<SessionId>
+    beforeOpen: (sessionId: SessionId) => void,
+  ): Promise<void>
+}
+
+/** Action registration used by the composer without importing its command-UI consumer. */
+interface FileCommandRegistry {
+  register(contribution: {
+    name: string
+    label(): string
+    icon: typeof IconPaperclipOutline16
+    available(session: { sessionId: SessionId }): boolean
+    ui: { kind: 'action'; run(session: { sessionId: SessionId }): void }
+  }): () => void
 }
 
 /** Resolve the session-scoped Conversation action face, failing loud. */
@@ -94,9 +127,11 @@ function concreteConversation(ctx: Context): ConversationController {
  * Mount the Conversation core and target-neutral presentation.
  * @param ctx - Client root context.
  */
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config: Config = Config({})): void {
   const sessions = ctx.sessions
   const slots = ctx.slots
+  // Schemastery's field default is materialized before Cordis calls apply.
+  const maxConcurrentFileUploads = config.maxConcurrentFileUploads as number
   const workspaceNavigation = ctx.get('uiWorkspace') as unknown as WorkspaceNavigation
   const uiConversation = new UiConversation(ctx, sessions)
 
@@ -130,28 +165,61 @@ export function apply(ctx: Context): void {
     }
     return tabs
   }
+  const activateView = (sessionId: SessionId, preferred: string | null): void => {
+    const active = resolveActiveView(viewTabs(), preferred)
+    if (active !== undefined) uiConversation.binding(sessionId).activate(active.id)
+  }
+  const restoreView = (sessionId: SessionId): void => {
+    activateView(sessionId, readConversationViewPreference(sessionId))
+  }
+  const restoreCurrentView = (): void => {
+    const sessionId = sessions.list.getSnapshot().current
+    if (sessionId !== undefined && sessions.binding(sessionId) !== undefined) {
+      restoreView(sessionId)
+    }
+  }
   const conversationViews = createSnapshotStore<readonly ViewTab[]>(viewTabs())
   const refreshViews = (): void => {
     const current = conversationViews.getSnapshot()
     const next = viewTabs()
-    if (current.length === next.length
+    const unchanged = current.length === next.length
       && current.every((tab, index) => {
         const candidate = next.at(index)
         return candidate !== undefined && tab.id === candidate.id && tab.label === candidate.label
-      })) return
-    conversationViews.set(next)
+      })
+    if (!unchanged) conversationViews.set(next)
+    restoreCurrentView()
   }
   ctx.effect(() => {
+    let currentSessionId = sessions.list.getSnapshot().current
     const disposeViews = slots.subscribe('conversation.view', refreshViews)
     const disposeLocale = ctx.locale.subscribe(refreshViews)
+    const disposeCurrent = sessions.list.subscribe(() => {
+      const nextSessionId = sessions.list.getSnapshot().current
+      if (nextSessionId === currentSessionId) return
+      currentSessionId = nextSessionId
+      restoreCurrentView()
+    })
     return () => {
+      disposeCurrent()
       disposeLocale()
       disposeViews()
     }
-  }, 'ui-conversation: View roster')
+  }, 'ui-conversation: View selection')
 
   const inputHub = new InputHub(ctx, t)
   const composerBlocks = new ComposerBlockRegistry()
+
+  ctx.inject(['commandUi'], (scope) => {
+    const commands = scope.get('commandUi') as FileCommandRegistry
+    scope.effect(() => commands.register({
+      name: 'file',
+      label: () => t('input.file'),
+      icon: IconPaperclipOutline16,
+      available: session => inputHub.canPickFiles(session.sessionId),
+      ui: { kind: 'action', run: (session) => { inputHub.pickFiles(session.sessionId) } },
+    }), 'ui-conversation: File action')
+  })
 
   // Conversation assembly and input share the Session binding lifecycle. The
   // source roster is installed before any consuming Slot entry.
@@ -160,9 +228,11 @@ export function apply(ctx: Context): void {
     props: ['inputActions'],
     resolve: (binding) => {
       const shell = inputHub.shellFor(binding)
+      const conversation = uiConversation.binding(binding)
+      restoreView(binding.sessionId)
       return {
         hooks: {
-          conversation: uiConversation.binding(binding).snapshot,
+          conversation: conversation.snapshot,
           input: shell.state,
         },
         props: { inputActions: shell.actions },
@@ -171,18 +241,14 @@ export function apply(ctx: Context): void {
   })
 
   const registerConversationRoot = () => slots.register({
-    name: 'conversation',
+    name: 'main.conversation',
     locale: NS,
     children: {
       'conversation.session': { kind: 'single', scope: 'session' },
       'conversation.session.header': { kind: 'single', scope: 'session' },
       'conversation.composer': { kind: 'chain', scope: 'session' },
       'conversation.composer.bar': { kind: 'single', scope: 'session-maybe' },
-      'conversation.input.overlay': { kind: 'list', scope: 'session' },
       'conversation.input.dock': { kind: 'list', scope: 'session' },
-      'conversation.composer.dock': { kind: 'list', scope: 'session' },
-      'conversation.input.left': { kind: 'list', scope: 'session' },
-      'conversation.input.right': { kind: 'list', scope: 'session' },
       'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
       'conversation.hero.workspace': { kind: 'single', scope: 'root' },
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
@@ -193,25 +259,27 @@ export function apply(ctx: Context): void {
         newWorktreeSessions: concreteConversation(ctx).newWorktreeSessions,
       },
       toggleNewWorktree: (id, enabled) => { concreteConversation(ctx).setNewWorktree(id, enabled) },
-      selectWorkspace: async (workspaceId) => {
-        const nextId = await workspaceNavigation.connectWorkspace(workspaceId)
+      selectWorkspace: workspaceId => workspaceNavigation.openWorkspace(workspaceId, (nextId) => {
         if (sessionId !== undefined && nextId !== sessionId) {
           const from = inputHub.shell(sessionId)
           const draft = from.snapshot.draft
-          const imageIds = from.snapshot.imageIds
+          const attachmentIds = from.snapshot.attachmentIds
           const next = inputHub.shell(nextId)
-          if (imageIds.length === 0 || next.addImages(imageIds)) {
+          if (attachmentIds.length === 0 || next.addAttachments(attachmentIds)) {
+            if (sessions.binding(nextId) === undefined) {
+              throw new Error(`ui-conversation: session "${nextId}" resolved no binding`)
+            }
+            concreteConversation(ctx).rebindDraftFiles(nextId, attachmentIds)
             if (draft !== '') {
               next.setDraft(draft)
               from.setDraft('')
             }
-            if (imageIds.length > 0) {
-              for (const id of imageIds) from.removeImage(id)
+            if (attachmentIds.length > 0) {
+              for (const id of attachmentIds) from.removeAttachment(id)
             }
           }
         }
-        sessions.open(nextId)
-      },
+      }),
     }),
   }, ConversationRoot)
 
@@ -221,9 +289,13 @@ export function apply(ctx: Context): void {
       'conversation.view': { kind: 'list', scope: 'session' },
     },
     store: conversationStore,
-    inject: (sessionId: SessionId, _actions: BoundActions<typeof conversationStore>): ConversationSessionInjected => ({
+    inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionInjected => ({
       hooks: { conversationViews },
       bindDraftMirror: write => inputHub.shell(sessionId).bindMirror(write),
+      openView: (view, focus) => {
+        activateView(sessionId, view)
+        actions.openView(view, focus)
+      },
     }),
   }, ConversationSession)
 
@@ -234,11 +306,16 @@ export function apply(ctx: Context): void {
       'conversation.session.header.lineage': { kind: 'single', scope: 'session' },
       'conversation.session.header.actions': { kind: 'list', scope: 'session' },
       'conversation.session.header.utilities': { kind: 'list', scope: 'session' },
+      'conversation.session.header.corner': { kind: 'single', scope: 'session' },
     },
     store: conversationStore,
-    inject: (): ConversationSessionHeaderInjected => ({
+    inject: (sessionId: SessionId, actions: BoundActions<typeof conversationStore>): ConversationSessionHeaderInjected => ({
       hooks: { conversationViews },
-      open: (id) => { sessions.open(id) },
+      open: (id) => { workspaceNavigation.openSession(id) },
+      selectView: (view) => {
+        activateView(sessionId, view)
+        actions.setView(view)
+      },
     }),
   }, ConversationSessionHeader)
 
@@ -254,22 +331,27 @@ export function apply(ctx: Context): void {
     locale: NS,
     children: {
       'conversation.input.attachments': { kind: 'single', scope: 'session-maybe' },
+      'conversation.input.overlay': { kind: 'list', scope: 'session' },
+      'conversation.input.left': { kind: 'list', scope: 'session' },
       'conversation.input.plan': { kind: 'single', scope: 'session' },
+      'conversation.input.right': { kind: 'list', scope: 'session' },
       'conversation.input.model': { kind: 'single', scope: 'session' },
+      'conversation.composer.dock': { kind: 'list', scope: 'session' },
     },
     inject: (sessionId: SessionId | undefined): ComposerBarInjected => {
       if (sessionId === undefined) {
         return {
           keyboard: undefined,
-          addImages: undefined,
-          removeImage: undefined,
-          draftImages: undefined,
-          resolveSubmitMode: (running, gesture, steeringAvailable) =>
-            submissionPolicy.resolve(running, gesture, steeringAvailable),
+          addFiles: undefined,
+          removeAttachment: undefined,
+          resolveDraftAttachments: undefined,
+          retryFileUpload: undefined,
           toggleCommandMenu: undefined,
           stop: undefined,
           command: undefined,
           hooks: {
+            busyEnter: submissionPolicy.busyEnter,
+            fileUploads: ABSENT_FILE_UPLOADS,
             notices: ABSENT_NOTICES,
             lexicon: ABSENT_LEXICON,
             menuLauncher: ABSENT_MENU_LAUNCHER,
@@ -281,11 +363,12 @@ export function apply(ctx: Context): void {
       const inputTriggers = inputHub.inputTriggers(sessionId)
       return {
         keyboard: shell,
-        addImages: (files) => {
+        addFiles: (files) => {
+          if (sessions.binding(sessionId) === undefined) return t('file.sessionUnavailable')
           try {
-            const images = conversation.createDraftImages(files)
-            if (!shell.addImages(images.map(image => image.id))) {
-              conversation.releaseDraftImages(images)
+            const drafts = conversation.createDrafts(sessionId, files)
+            if (!shell.addAttachments(drafts.map(draft => draft.id))) {
+              conversation.releaseDraftAttachments(drafts)
             }
             return null
           } catch (error: unknown) {
@@ -293,13 +376,13 @@ export function apply(ctx: Context): void {
             return error instanceof Error ? error.message : String(error)
           }
         },
-        removeImage: (id) => {
-          conversation.releaseDraftImage(id)
-          shell.removeImage(id)
+        removeAttachment: (id) => {
+          if (shell.removeAttachment(id)) conversation.releaseDraftAttachment(id)
         },
-        draftImages: ids => conversation.draftImages(ids),
-        resolveSubmitMode: (running, gesture, steeringAvailable) =>
-          submissionPolicy.resolve(running, gesture, steeringAvailable),
+        resolveDraftAttachments: ids => conversation.resolveDraftAttachments(ids),
+        retryFileUpload: (id) => {
+          if (sessions.binding(sessionId) !== undefined) conversation.retryFileUpload(sessionId, id)
+        },
         toggleCommandMenu: inputTriggers === undefined
           ? undefined
           : (selection) => {
@@ -325,6 +408,8 @@ export function apply(ctx: Context): void {
           return result.ok && result.value.matched
         },
         hooks: {
+          busyEnter: submissionPolicy.busyEnter,
+          fileUploads: conversation.fileUploads,
           notices: shell.notices,
           lexicon: shell.lexicon,
           menuLauncher: inputTriggers?.launcher ?? ABSENT_MENU_LAUNCHER,
@@ -333,7 +418,12 @@ export function apply(ctx: Context): void {
     },
   }, InputBar)
 
-  slots.inject('conversation', function* () {
+  slots.inject('main', function* () {
+    yield slots.register({
+      name: 'main',
+      key: 'conversation',
+      children: { 'main.conversation': { kind: 'single', scope: 'session-maybe' } },
+    }, ConversationPanel)
     yield registerConversationRoot()
     yield registerConversationSession()
     yield registerConversationHeader()
@@ -341,7 +431,11 @@ export function apply(ctx: Context): void {
     yield registerComposerBar()
   })
 
-  ctx.plugin(ConversationController, { input: inputHub, blocks: composerBlocks })
+  ctx.plugin(ConversationController, {
+    input: inputHub,
+    blocks: composerBlocks,
+    maxConcurrentFileUploads,
+  })
   ctx.plugin(todoDockEntry)
   ctx.plugin(queueDockEntry)
 }
